@@ -36,11 +36,16 @@ export async function createReviewWorkspace({ root, row, existingNoteId }) {
       topSource: row.topSource,
     },
     reviewFlags: row.flags,
+    mediaLineage: 'media-lineage.json',
     note: '这是巡检线索，不是改稿结论。先回读原正文和图片，再决定是否编辑。',
   };
   await fs.writeFile(
     path.join(directory, 'review.json'),
     `${JSON.stringify(review, null, 2)}\n`,
+    { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+  ).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  await fs.writeFile(path.join(directory, 'media-lineage.json'),
+    `${JSON.stringify({ schemaVersion: 1, entries: [] }, null, 2)}\n`,
     { encoding: 'utf8', flag: 'wx', mode: 0o600 },
   ).catch(error => { if (error.code !== 'EEXIST') throw error; });
   return directory;

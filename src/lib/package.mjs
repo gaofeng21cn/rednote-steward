@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { inspectLineage, lineageFingerprint } from './lineage.mjs';
 
 export function unicodeLength(value) { return [...String(value ?? '')].length; }
 export function normalizeText(value) {
@@ -14,11 +15,17 @@ export async function hashFile(file) {
   for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
-export function contentFingerprint({ kind, account, sourceNoteId, replacesNoteId, title, body, topics, images, video, cover, subtitle }) {
-  return sha256(JSON.stringify({ platform: 'xiaohongshu', kind, account,
+export function contentFingerprint({ kind, account, sourceNoteId, replacesNoteId, title, body, topics, images, video, cover, subtitle, mediaLineage, declarations, seriesId, episode, contentType }) {
+  const payload = { platform: 'xiaohongshu', kind, account,
     sourceNoteId: sourceNoteId || null, replacesNoteId: replacesNoteId || null,
     title, body, topics, images: images.map(item => item.sha256),
-    video: video?.sha256 ?? null, cover: cover?.sha256 ?? null, subtitle: subtitle?.sha256 ?? null }));
+    video: video?.sha256 ?? null, cover: cover?.sha256 ?? null, subtitle: subtitle?.sha256 ?? null };
+  // Keep legacy package fingerprints stable. Optional metadata enters the
+  // fingerprint only when the manifest explicitly supplies it.
+  if (mediaLineage?.length) payload.mediaLineage = lineageFingerprint(mediaLineage);
+  if (declarations && Object.keys(declarations).length) payload.declarations = declarations;
+  if (seriesId || episode != null || contentType) payload.organization = { seriesId: seriesId || null, episode: episode ?? null, contentType: contentType || null };
+  return sha256(JSON.stringify(payload));
 }
 function text(value, label, { required = true, max = 0 } = {}) {
   if (value != null && typeof value !== 'string') throw new Error(`${label} must be a string`);
@@ -83,6 +90,18 @@ export async function inspectPackage(input) {
   if (topics.length > 10 || topics.some(topic => !topic || topic.includes(','))) throw new Error('topics supports at most 10 names without commas');
   const sourceNoteId = kind === 'edit' ? noteId(raw.sourceNoteId ?? raw.id, 'sourceNoteId') : null;
   const replacesNoteId = raw.replacesNoteId ? noteId(raw.replacesNoteId, 'replacesNoteId') : null;
+  const seriesId = raw.seriesId == null ? null : text(raw.seriesId, 'seriesId');
+  if (seriesId && !/^[A-Za-z0-9_-]{1,128}$/.test(seriesId)) throw new Error('seriesId must use letters, numbers, _ or -');
+  const episode = raw.episode == null ? null : (Number.isInteger(raw.episode) && raw.episode > 0 ? raw.episode : text(raw.episode, 'episode'));
+  const contentType = raw.contentType == null ? null : text(raw.contentType, 'contentType', { max: 80 });
+  if (raw.declarations != null) {
+    if (!raw.declarations || typeof raw.declarations !== 'object' || Array.isArray(raw.declarations)) throw new Error('declarations must be an object');
+    const allowed = new Set(['original', 'aiGenerated']);
+    for (const [key, value] of Object.entries(raw.declarations)) {
+      if (!allowed.has(key) || typeof value !== 'boolean') throw new Error('declarations supports boolean original and aiGenerated fields');
+    }
+  }
+  const declarations = raw.declarations ? { ...raw.declarations } : {};
   if (raw.images != null && !Array.isArray(raw.images)) throw new Error('images must be an array');
   const imagePaths = raw.images ?? [];
   if (imagePaths.length > 18) throw new Error('images supports at most 18 entries');
@@ -93,6 +112,7 @@ export async function inspectPackage(input) {
   const video = raw.video ? await mediaFile(raw.video, packageDir, 'video') : null;
   const cover = raw.cover ? await mediaFile(raw.cover, packageDir, 'cover') : null;
   const subtitle = raw.subtitle ? await mediaFile(raw.subtitle, packageDir, 'subtitle') : null;
+  const mediaLineage = await inspectLineage(raw.mediaLineage, packageDir, [...images, video, cover].filter(Boolean));
   if (kind === 'publish' && !images.length && !video) throw new Error('publish packages require at least one image or a video');
   if (raw.publishAt && Number.isNaN(Date.parse(raw.publishAt))) throw new Error('publishAt must be an ISO date');
   const warnings = [];
@@ -102,6 +122,7 @@ export async function inspectPackage(input) {
   const result = { schemaVersion: 1, manifestPath, packageDir, platform: 'xiaohongshu', kind, account,
     sourceNoteId, replacesNoteId, title, body, topics, images, imageCount: images.length,
     video, cover, subtitle, mediaType: video ? 'video' : 'image',
+    seriesId, episode, contentType, declarations, mediaLineage,
     publishAt: raw.publishAt ? new Date(raw.publishAt).toISOString() : null,
     notes: text(raw.notes, 'notes', { required: false }), warnings };
   return { ...result, fingerprint: contentFingerprint(result) };
