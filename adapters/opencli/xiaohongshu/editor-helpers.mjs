@@ -446,11 +446,33 @@ async function replaceVideo(page, video, timeoutMs = 600000) {
   // Exactly one upload attempt. If the bridge loses the result after the
   // file reaches the platform, the controller retains the task as unknown.
   await page.setFileInput([video], videoInput);
+  let uploadObserved = false;
+  let lastState = null;
   await waitFor(
     page,
     async () => {
       const state = await readEditor(page);
       const text = String(await page.evaluate('document.body.innerText'));
+      lastState = state;
+      const media = await page.evaluate(`(() => {
+        const input = document.querySelector('input[type="file"][accept*=".mp4"]');
+        const video = document.querySelector('#publish-container video, video[src]');
+        const names = Array.from(document.querySelectorAll('div'))
+          .map(el => (el.innerText || '').trim())
+          .filter(text => /^[^/\\\\]+\\.(?:mp4|mov|m4v)$/i.test(text));
+        return {
+          inputName: String(input?.files?.[0]?.name || ''),
+          visibleNames: [...new Set(names)].slice(0, 5),
+        };
+      })()`);
+      if (
+        media?.inputName ||
+        media?.visibleNames?.length ||
+        /上传中|视频处理中/.test(text) ||
+        (state?.videoPresent && state.video?.src !== before.video?.src)
+      ) {
+        uploadObserved = true;
+      }
       return Boolean(
         state?.videoPresent &&
         state.video?.duration > 0 &&
@@ -462,6 +484,12 @@ async function replaceVideo(page, video, timeoutMs = 600000) {
     1000,
     'Xiaohongshu video upload and processing',
   );
+  if (!uploadObserved) {
+    throw new CommandExecutionError(
+      'The video upload did not produce an observable platform state; no media change was confirmed',
+      'Inspect the composer before another upload attempt.',
+    );
+  }
   return readEditor(page);
 }
 

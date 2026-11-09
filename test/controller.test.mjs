@@ -132,10 +132,12 @@ test('plain topic text and missing custom-cover confirmation never produce verif
   const task={title:'Example',body:'Caption',topics:['城市漫步'],images:[{sha256:'synthetic'}],platform_note_id:'000000000000000000000001'};
   const row={noteId:task.platform_note_id,title:task.title,body:task.body,topics:['城市漫步'],imageCount:1,mediaType:'image',verification:{title:true,body:true,nativeTopics:true,imageCount:true}};
   assert.equal(compareReadback(task,row).matched,false);
-  const videoTask={...task,images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
+  const videoTask={...task,kind:'publish',images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
   const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,cover:{url:'https://example.invalid/cover'}};
   assert.equal(compareReadback(videoTask,videoRow).matched,false);
   assert.equal(compareReadback(videoTask,videoRow,{cover:{confirmationClicked:true}}).matched,true);
+  const editTask={...videoTask,kind:'edit',source_note_id:videoTask.platform_note_id};
+  assert.equal(compareReadback(editTask,videoRow).matched,true);
 });
 
 test('video with a custom cover flows through publication and explicit field verification',async t=>{

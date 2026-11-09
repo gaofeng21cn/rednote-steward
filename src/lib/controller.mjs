@@ -36,7 +36,13 @@ export function compareReadback(task, row, publication = null) {
   const baseline = task.baseline_note;
   if (task.video) {
     checks.media = row?.mediaType === 'video' && row?.videoPresent === true;
-    if (task.cover) checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+    // New publications can confirm cover selection from the adapter receipt.
+    // Edits retain the existing cover; there is no cover-upload receipt.
+    if (task.cover && task.kind === 'publish') {
+      checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+    } else if (task.cover) {
+      checks.customCover = Boolean(row?.cover?.url);
+    }
   } else if (task.images.length) {
     checks.media = row?.mediaType === 'image' && row?.verification?.imageCount === true && row.imageCount === task.images.length;
   } else if (baseline?.mediaType === 'video') {
