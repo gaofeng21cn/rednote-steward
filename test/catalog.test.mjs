@@ -15,7 +15,7 @@ function fixture(t) {
 }
 test('inventory imports platform identities without creating publication tasks and preserves local decisions',t=>{
   const db=fixture(t);
-  importInventory(db,{account:'travel',accountUserId:'demo-user',notes:[{id:first,title:'路边的旧书店',published_at:'2026-11-01T00:00:00Z'}]});
+  importInventory(db,{account:'travel',accountUserId:'demo-user',notes:[{id:first,title:'路边的旧书店',published_at:'2026-11-01T00:00:00Z'}],capturedAt:'2026-11-08T00:00:00Z'});
   updateCatalogNote(db,{accountUserId:'demo-user',noteId:first,maintenanceStatus:'keep',reason:'The original observation already works',seriesId:'city-walk',episode:1});
   importInventory(db,{account:'travel',accountUserId:'demo-user',notes:[{id:first,title:'书店门口'}],capturedAt:'2026-11-09T00:00:00Z'});
   const note=catalogNotes(db,{accountUserId:'demo-user'}).notes[0];
@@ -53,6 +53,8 @@ test('incremental inspection uses timestamp plus boundary IDs and keeps original
   assert.deepEqual(inspectionCandidates(db,{accountUserId:'demo'}).notes.map(note=>note.note_id),[second]);
   updateCatalogNote(db,{accountUserId:'demo',noteId:second,maintenanceStatus:'keep'});
   assert.equal(inspectionCandidates(db,{accountUserId:'demo'}).notes.length,0);
+  setInspectionCursor(db,{account:'travel',accountUserId:'demo',watermark:'2026-11-08T00:00:00Z',boundaryNoteIds:[second]});
+  assert.deepEqual(getInspectionCursor(db,{accountUserId:'demo'}).cursor.boundaryNoteIds,[first,second]);
   assert.equal(getInspectionCursor(db,{accountUserId:'demo'}).cursor.watermark,'2026-11-08T00:00:00.000Z');
   assert.throws(()=>setInspectionCursor(db,{account:'travel',accountUserId:'demo',watermark:'2026-11-07T00:00:00Z'}),/backwards/);
 });

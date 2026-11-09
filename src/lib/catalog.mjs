@@ -68,7 +68,8 @@ export function importInventory(db, { account, accountUserId, notes, capturedAt,
       platform_url=COALESCE(excluded.platform_url,catalog_notes.platform_url),
       media_type=COALESCE(excluded.media_type,catalog_notes.media_type),
       inventory_json=excluded.inventory_json,last_seen_at=excluded.last_seen_at,
-      last_readback_at=COALESCE(excluded.last_readback_at,catalog_notes.last_readback_at)`);
+      last_readback_at=COALESCE(excluded.last_readback_at,catalog_notes.last_readback_at)
+      WHERE excluded.last_seen_at >= catalog_notes.last_seen_at`);
     for (const { note, id } of rows) statement.run(userId,id,alias,
       typeof note.title === 'string' ? note.title : null,
       note.publishedAt ?? note.published_at ?? note.date ?? null,
@@ -149,12 +150,15 @@ export function setInspectionCursor(db, { account, accountUserId, watermark, bou
   if (!Array.isArray(boundaryNoteIds)) throw new Error('boundaryNoteIds must be an array');
   const boundary = [...new Set(boundaryNoteIds.map(noteIdentity))].sort(), value = timestamp(watermark);
   ensureCatalogSchema(db);
-  const previous = db.prepare('SELECT watermark FROM inspection_cursors WHERE account_user_id=?').get(userId);
-  if (previous && value < previous.watermark) throw new Error('Inspection watermark cannot move backwards');
-  db.prepare(`INSERT INTO inspection_cursors (account_user_id,account,watermark,boundary_note_ids_json,updated_at) VALUES (?,?,?,?,?)
-    ON CONFLICT(account_user_id) DO UPDATE SET account=excluded.account,watermark=excluded.watermark,boundary_note_ids_json=excluded.boundary_note_ids_json,updated_at=excluded.updated_at`)
-    .run(userId,alias,value,JSON.stringify(boundary),timestamp());
-  return getInspectionCursor(db,{accountUserId:userId});
+  return transaction(db,()=> {
+    const previous = db.prepare('SELECT watermark,boundary_note_ids_json FROM inspection_cursors WHERE account_user_id=?').get(userId);
+    if (previous && value < previous.watermark) throw new Error('Inspection watermark cannot move backwards');
+    const merged=previous?.watermark===value?[...new Set([...JSON.parse(previous.boundary_note_ids_json),...boundary])].sort():boundary;
+    db.prepare(`INSERT INTO inspection_cursors (account_user_id,account,watermark,boundary_note_ids_json,updated_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(account_user_id) DO UPDATE SET account=excluded.account,watermark=excluded.watermark,boundary_note_ids_json=excluded.boundary_note_ids_json,updated_at=excluded.updated_at`)
+      .run(userId,alias,value,JSON.stringify(merged),timestamp());
+    return getInspectionCursor(db,{accountUserId:userId});
+  });
 }
 export function getInspectionCursor(db, { accountUserId }) {
   required(accountUserId,'accountUserId');
