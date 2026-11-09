@@ -1,6 +1,9 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { existsSync } from 'node:fs';
+import { reviewItem, reviewRevision } from './review.mjs';
 import { stateRoot, privateDirectory, getAccount, listAccounts } from './config.mjs';
 import { openDatabase, transaction, addEvent, rowToTask, claimTask } from './db.mjs';
 import { inspectPackage, verifyFrozenPackage, normalizeText } from './package.mjs';
@@ -80,6 +83,36 @@ export class Controller {
       return { ok: true, tasks };
     });
   }
+  async review({ taskId, account, fingerprint, revision } = {}) {
+    if (!taskId && (fingerprint || revision)) throw new Error('An exact task ID is required with a fingerprint or revision');
+    if (!existsSync(this.dbPath)) {
+      if (taskId) throw new Error(`Task not found: ${taskId}`);
+      return { ok: true, items: [] };
+    }
+    // A preview neither initializes/migrates the database nor adds review state.
+    const db = new DatabaseSync(this.dbPath, { readOnly: true });
+    let snapshots;
+    try {
+      db.exec('BEGIN');
+      const tasks = taskId ? [rowToTask(db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId))]
+        : db.prepare(`SELECT * FROM tasks ${account ? 'WHERE account = ?' : ''} ORDER BY updated_at DESC`).all(...(account ? [account] : [])).map(rowToTask);
+      if (taskId && !tasks[0]) throw new Error(`Task not found: ${taskId}`);
+      snapshots = tasks.map(task => ({ task, events: db.prepare('SELECT event, payload_json, created_at FROM events WHERE task_id = ? ORDER BY id').all(task.id)
+        .map(({ payload_json, ...event }) => ({ ...event, payload: payload_json ? JSON.parse(payload_json) : null })) }));
+      db.exec('COMMIT');
+    } finally { db.close(); }
+    const items = [];
+    for (const { task, events } of snapshots) {
+      if (account && task.account !== account) throw new Error('Task does not belong to the selected account');
+      if (fingerprint && task.fingerprint !== fingerprint) throw new Error('Task content fingerprint changed; reopen the exact task');
+      if (revision && reviewRevision(task) !== revision) throw new Error('Task revision changed; reopen the exact task');
+      let source = { state: 'current' };
+      try { this.frozenAccount(task); await verifyFrozenPackage(task); }
+      catch (error) { source = { state: 'stale', reason: error.message }; }
+      items.push(reviewItem(task, events, source));
+    }
+    return { ok: true, items };
+  }
   async ingest(input, { dryRun = false } = {}) {
     const content = await inspectPackage(input);
     if (dryRun) return { ok: true, dryRun: true, package: content };
@@ -105,11 +138,13 @@ export class Controller {
       return { ok: true, taskId: id, state: 'draft', fingerprint: content.fingerprint, warnings: content.warnings };
     }));
   }
-  approve(id, { at, authorization = 'Current operator instruction' } = {}) {
+  approve(id, { at, authorization = 'Current operator instruction', fingerprint, revision } = {}) {
     return this.withDatabase(db => transaction(db, () => {
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
       if (!task) throw new Error(`Task not found: ${id}`);
       if (!['draft', 'queued', 'failed'].includes(task.state)) throw new Error(`Task is ${task.state}; reconcile an unresolved attempt before authorizing a retry`);
+      if (fingerprint && task.fingerprint !== fingerprint) throw new Error('Task content fingerprint changed; reopen the exact task');
+      if (revision && reviewRevision(rowToTask(task)) !== revision) throw new Error('Task revision changed; reopen the exact task');
       const scheduledAt = at || task.scheduled_at || now();
       if (!Number.isFinite(Date.parse(scheduledAt))) throw new Error('Schedule must be a valid ISO date');
       const schedule = new Date(scheduledAt).toISOString();

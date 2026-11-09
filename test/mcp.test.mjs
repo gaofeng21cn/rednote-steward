@@ -52,8 +52,12 @@ test('standard MCP handshake, tools, resources and shared CLI account state', as
     const imported = await client.callTool({ name: 'package_ingest', arguments: { path: manifest } });
     const taskId = imported.structuredContent.taskId;
     assert.ok(taskId, JSON.stringify(imported));
+    const reviewed = await client.callTool({ name: 'task_review', arguments: { taskId } });
+    assert.equal(reviewed.structuredContent.items[0].task_id, taskId);
+    const exact = reviewed.structuredContent.items[0];
     const authorized = await client.callTool({ name: 'task_authorize', arguments: {
       taskId, authorization: 'Publish the synthetic fixture through the fake adapter.',
+      fingerprint: exact.fingerprint, revision: exact.revision,
     } });
     assert.notEqual(authorized.isError, true, JSON.stringify(authorized));
     const started = await client.callTool({ name: 'task_execute', arguments: { taskId } });

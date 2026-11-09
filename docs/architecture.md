@@ -47,8 +47,16 @@ OpenCLI is bundled at a tested version. The packaged adapter runner loads Stewar
 
 OpenCLI performs browser operations through Browser Bridge. The controller owns task identity, package version, account serialization, authorization records, and recovery. Adapters own the actual page interaction and expose what the platform returned.
 
-The first release focuses on macOS and one backend. Optional backends can later implement the same task semantics after their media, cover, native-topic, editing, and readback behavior has been verified. A standard MCP App can present the existing queue without introducing another source of task state.
+The first release focuses on macOS and one backend. Optional backends can later implement the same task semantics after their media, cover, native-topic, editing, and readback behavior has been verified. The OPL shared MCP App reads the existing queue through `src/app-contribution.mjs`; it owns no task state. Task, content and media views use the existing Package descriptor and contribution ABI. `review` opens SQLite read-only and never initializes a database, starts a worker, or reads the platform. Review data includes the frozen content fingerprint, the stored task revision, source drift, same-note field verification and separate publication evidence. Media drift disables the artifact link rather than presenting changed bytes as the frozen asset.
 
 ## Verification
 
 The repository tests package validation, stable fingerprints, account binding, concurrent task handling, interruption behavior, adapter control flow, installer isolation, and the MCP protocol. Live account reads provide separate evidence for browser connection and identity. Actual publishing, platform review, and audience outcomes each require their own observation.
+
+## Exact review handoff
+
+`xhs-ops review [TASK_ID]` and MCP `task_review` return the same owner projection as the shared contribution. Select `rednote.steward.review` or `rednote.steward.media` with `task_id`, and optionally the returned `fingerprint` and `revision`, through `open_opl_apps`. Missing identity opens an input form; a mismatched identity or revision fails. The task list supports the same `task_id` filter and an optional account alias.
+
+A human can inspect the content and ask the Agent to continue under the existing publication authorization. `approve` / `task_authorize` accept the reviewed `fingerprint` and `revision` so a changed task cannot silently inherit a stale handoff. Execution still rechecks the frozen package and account in the existing Controller. The shared views expose no publishing actions. Reopening unresolved attempts only observes the original task; the existing `reconcile` command resolves its outcome before a retry.
+
+The `opl-package.json` contribution is development-only, with no publication reference. Native plugin metadata and the npm package include the same descriptor, adapter and owner source; this is source packaging, not an installed-host or live-account acceptance claim. Node 24 or newer is required. `npm run lock:package` updates the standard Package content lock after source edits, and `npm run check:package` verifies the lock and packaged files.

@@ -1,0 +1,36 @@
+{
+  "schema_version": "opl-package-app-contribution-adapter.v1",
+  "reads": {
+    "rednote.steward.v1#tasks": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
+    },
+    "rednote.steward.v1#review": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
+    },
+    "rednote.steward.v1#media": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
+    }
+  },
+  "actions": {}
+}
