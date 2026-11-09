@@ -16,7 +16,7 @@ RedNote Steward brings ready-to-share media, account settings, publication tasks
 A travel photo collection, a series of finished educational videos, and an update to an older post all need the same practical answers: which version is ready, which account will receive it, what has already been submitted, and where to continue after an interruption. Steward keeps those answers with the task, so they remain available in the next conversation or terminal session.
 
 <p align="center">
-  <img src="assets/branding/rednote-steward-overview.png" alt="Photos and videos enter a local account queue, are published through OpenCLI and Chrome, and are read back from the same platform note. CLI and MCP share the controller; personal data remains local." width="100%" />
+  <img src="assets/branding/rednote-steward-overview-v2.png" alt="Photos and videos enter a local account queue, are published through OpenCLI and Chrome, and are read back from the same platform note. CLI and MCP share the controller; personal data remains local." width="100%" />
 </p>
 
 ## What You Can Ask It To Do

@@ -16,7 +16,7 @@ RedNote Steward 把准备好的素材、账号配置、发布任务和平台结�
 一组旅行照片、一季已制作完成的科普视频，或一篇旧帖的修订，都需要理清几件事：当前准备好的是哪一版、发到哪个账号、哪些已经提交、中断之后从哪里继续。Steward 把这些信息留在任务里，换一个对话或重新打开终端，也能接着处理。
 
 <p align="center">
-  <img src="assets/branding/rednote-steward-overview.png" alt="照片和视频进入本地账号队列，通过 OpenCLI 与 Chrome 发布，再回读同一篇平台笔记。CLI 与 MCP 共用控制器，个人数据留在本机。" width="100%" />
+  <img src="assets/branding/rednote-steward-overview-v2.png" alt="照片和视频进入本地账号队列，通过 OpenCLI 与 Chrome 发布，再回读同一篇平台笔记。CLI 与 MCP 共用控制器，个人数据留在本机。" width="100%" />
 </p>
 
 ## 直接这样开始
