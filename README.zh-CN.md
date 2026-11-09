@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/rednote-steward-logo.png" alt="RedNote Steward 标志" width="132" />
+  <img src="assets/branding/rednote-steward-logo-v2.png" alt="RedNote Steward 标志" width="132" />
 </p>
 
 <p align="center">
