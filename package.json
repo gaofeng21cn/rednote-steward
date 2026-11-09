@@ -1,0 +1,46 @@
+{
+  "name": "rednote-steward",
+  "version": "0.1.0",
+  "description": "Local publishing and account operations for Xiaohongshu, with a shared CLI and MCP server.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gaofeng21cn/rednote-steward.git"
+  },
+  "homepage": "https://github.com/gaofeng21cn/rednote-steward",
+  "bugs": {
+    "url": "https://github.com/gaofeng21cn/rednote-steward/issues"
+  },
+  "bin": {
+    "xhs-ops": "src/cli.mjs",
+    "rednote-steward-mcp": "src/mcp.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "src/",
+    "adapters/",
+    "skills/",
+    "examples/",
+    "scripts/",
+    "install.sh",
+    "README.md",
+    "README.zh-CN.md",
+    "docs/",
+    "assets/",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "mcp": "node src/mcp.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7",
+    "@jackwener/opencli": "1.8.5"
+  }
+}

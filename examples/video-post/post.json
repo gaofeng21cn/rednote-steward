@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "platform": "xiaohongshu",
+  "account": "demo",
+  "kind": "publish",
+  "title": "示例：成品视频",
+  "body": "用自己的成品视频、封面和文案替换这个模板。",
+  "topics": [],
+  "video": "final.mp4",
+  "cover": "cover.png",
+  "subtitle": "captions.srt"
+}

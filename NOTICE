@@ -1,0 +1,8 @@
+RedNote Steward
+Copyright 2026 RedNote Steward contributors
+
+Includes Xiaohongshu browser adapters developed for the local xhs-ops workflow.
+Browser command patterns in adapters/opencli are based in part on OpenCLI
+(https://github.com/jackwener/OpenCLI), licensed under Apache-2.0.
+OpenCLI is distributed as a separate dependency under its own license.
+The project is independently maintained.

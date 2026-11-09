@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="930" viewBox="0 0 1440 930" role="img" aria-labelledby="title desc">
+<title id="title">RedNote Steward publishing workflow</title><desc id="desc">Ready photos, videos and copy enter a local account queue. OpenCLI reuses logged-in Chrome to publish or edit. The same note is read back and uncertain results are reconciled before a new attempt. CLI and MCP share the controller; personal data stays on the user's machine.</desc>
+<defs>
+  <pattern id="dots" width="19" height="19" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r=".8" fill="#b8c7cf" opacity=".45"/></pattern>
+  <pattern id="blueHatch" width="9" height="9" patternUnits="userSpaceOnUse"><path d="M-1 10L10-1" stroke="#a8c7e8" stroke-width="1" opacity=".5"/></pattern>
+  <pattern id="tealHatch" width="9" height="9" patternUnits="userSpaceOnUse"><path d="M-1 10L10-1" stroke="#a2d1c6" stroke-width="1" opacity=".5"/></pattern>
+  <pattern id="redHatch" width="9" height="9" patternUnits="userSpaceOnUse"><path d="M-1 10L10-1" stroke="#e4b2a8" stroke-width="1" opacity=".6"/></pattern>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" fill="none" stroke="#303934" stroke-width="1.7" stroke-linejoin="round"/></marker>
+</defs>
+<style>
+.ink{fill:none;stroke:#29332f;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round}.fine{fill:none;stroke:#29332f;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.sketch{fill:none;stroke-width:1.2;stroke-linecap:round;opacity:.35}.hand{font-family:Chalkboard,'Comic Sans MS',cursive;fill:#25322e}.body{font-family:'Trebuchet MS',Arial,sans-serif;fill:#46554e}.label{font-family:'Trebuchet MS',Arial,sans-serif;font-size:18px;fill:#46554e}.tiny{font-family:'Trebuchet MS',Arial,sans-serif;font-size:15px;fill:#52645b}
+</style>
+<rect x="3" y="3" width="1434" height="924" rx="28" fill="#fcfcf7" stroke="#29332f" stroke-width="4"/><rect x="10" y="10" width="1420" height="910" rx="24" fill="url(#dots)"/>
+<text class="hand" x="720" y="83" text-anchor="middle" font-size="57">RedNote Steward</text>
+<path d="M442 100Q716 93 996 101" fill="none" stroke="#177d79" stroke-width="5" stroke-linecap="round"/>
+<text class="hand" x="720" y="141" text-anchor="middle" font-size="28">Ready to share. Easy to manage.</text>
+<path d="M341 63l-29-13m27 28l-35 2m36 15l-23 14M1098 62l27-12m-26 29l35 1m-35 15l23 14" fill="none" stroke="#177d79" stroke-width="4" stroke-linecap="round"/>
+<rect x="440" y="172" width="254" height="47" rx="14" fill="#eef5f8" stroke="#2e5ca8" stroke-width="2"/><text class="hand" x="567" y="203" text-anchor="middle" font-size="23">Codex · MCP</text>
+<rect x="744" y="172" width="254" height="47" rx="14" fill="#eef7f1" stroke="#177d79" stroke-width="2"/><text class="hand" x="871" y="203" text-anchor="middle" font-size="23">xhs-ops · CLI</text>
+<path d="M566 221v18H721m150-18v18H721v27" class="fine" marker-end="url(#arrow)"/><text class="tiny" x="1063" y="202">One shared controller</text>
+<!-- Media -->
+<rect x="42" y="282" width="299" height="367" rx="25" fill="#fcfcf9" stroke="#2e5ca8" stroke-width="3"/><path d="M57 297Q192 289 326 300V359H58Z" fill="url(#blueHatch)"/>
+<path d="M45 315Q42 283 74 285L309 281Q338 285 339 309V621Q338 651 309 648H70Q40 644 43 618Z" class="sketch" stroke="#2e5ca8"/>
+<text class="hand" x="192" y="333" text-anchor="middle" font-size="29">Your media</text>
+<g transform="translate(94 385) rotate(-6 65 55)"><rect x="0" y="0" width="131" height="111" rx="5" fill="#fcfcf9" class="ink"/><rect x="12" y="12" width="107" height="72" rx="3" fill="#edf5f2" class="fine"/><path d="M14 73L48 35L71 59L85 45L117 79" fill="#bdd9c8" stroke="#29332f" stroke-width="2.5"/><circle cx="94" cy="29" r="8" fill="#e9c269" class="fine"/><path d="M19 98h62" class="fine"/></g>
+<g transform="translate(177 442) rotate(5 50 40)"><rect width="111" height="83" rx="8" fill="#f9f4ee" class="ink"/><path d="M46 21L76 42L46 64Z" fill="#c94d4b" stroke="#29332f" stroke-width="2.5"/></g>
+<text class="label" x="191" y="567" text-anchor="middle">Photos · finished videos</text><text class="label" x="191" y="594" text-anchor="middle">Cover · copy · topics</text><text class="tiny" x="191" y="627" text-anchor="middle">Keep the original files</text>
+<!-- Queue -->
+<rect x="394" y="282" width="299" height="367" rx="25" fill="#fcfcf9" stroke="#177d79" stroke-width="3"/><path d="M408 297Q548 289 678 300V359H409Z" fill="url(#tealHatch)"/>
+<path d="M397 309Q394 283 423 284L666 281Q695 286 692 313V622Q693 651 665 647H422Q393 646 396 617Z" class="sketch" stroke="#177d79"/>
+<text class="hand" x="544" y="333" text-anchor="middle" font-size="29">A clear queue</text>
+<g transform="translate(459 386)"><path d="M20 0h128v143H0V19Z" fill="#fcfcf9" class="ink"/><path d="M20 0v19H0" class="fine"/><rect x="17" y="35" width="27" height="25" rx="4" fill="#d8e9df" class="fine"/><path d="M23 48l6 6 11-14m16 5h72m-72 11h53" class="fine"/><rect x="17" y="77" width="27" height="25" rx="4" fill="#f2e2bd" class="fine"/><path d="M55 86h72m-72 11h53M17 122h111" class="fine"/>
+<circle cx="147" cy="130" r="28" fill="#fcfcf9" stroke="#177d79" stroke-width="3"/><path d="M147 112v19l13 8" class="fine"/></g>
+<text class="label" x="543" y="567" text-anchor="middle">Account · version · progress</text><text class="label" x="543" y="594" text-anchor="middle">Publish now or when due</text><text class="tiny" x="543" y="627" text-anchor="middle">One writer per account</text>
+<!-- Browser -->
+<rect x="746" y="282" width="299" height="367" rx="25" fill="#fcfcf9" stroke="#c69031" stroke-width="3"/><path d="M761 297Q899 289 1030 300V359H762Z" fill="#f9edcf" opacity=".75"/>
+<path d="M749 309Q746 284 774 284L1019 281Q1046 287 1044 314V622Q1044 651 1018 648H774Q744 644 748 617Z" class="sketch" stroke="#c69031"/>
+<text class="hand" x="896" y="333" text-anchor="middle" font-size="29">Your browser</text>
+<g transform="translate(796 386)"><rect width="199" height="144" rx="9" fill="#fcfcf9" class="ink"/><path d="M1 27h197" class="fine"/><circle cx="14" cy="14" r="3" fill="#c94d4b"/><circle cx="27" cy="14" r="3" fill="#c69031"/><circle cx="40" cy="14" r="3" fill="#177d79"/>
+<rect x="15" y="42" width="68" height="75" rx="3" fill="#e8f1f5" class="fine"/><path d="M30 91l17-23 21 27" class="fine"/><path d="M101 48h70m-70 15h57m-57 15h64" class="fine"/><rect x="99" y="95" width="77" height="27" rx="9" fill="#d5e8df" stroke="#177d79" stroke-width="2"/><text class="tiny" x="137" y="114" text-anchor="middle"># topic</text></g>
+<text class="label" x="895" y="567" text-anchor="middle">OpenCLI + logged-in Chrome</text><text class="label" x="895" y="594" text-anchor="middle">Publish · edit · native topics</text><text class="tiny" x="895" y="627" text-anchor="middle">Reuse the account session</text>
+<!-- Readback -->
+<rect x="1098" y="282" width="299" height="367" rx="25" fill="#fcfcf9" stroke="#c94d4b" stroke-width="3"/><path d="M1113 297Q1251 289 1382 300V359H1114Z" fill="url(#redHatch)"/>
+<path d="M1101 309Q1098 284 1126 285L1371 281Q1398 287 1396 314V622Q1396 651 1370 648H1126Q1096 644 1100 617Z" class="sketch" stroke="#c94d4b"/>
+<text class="hand" x="1248" y="333" text-anchor="middle" font-size="29">Read it back</text>
+<g transform="translate(1161 382)"><rect x="0" y="0" width="135" height="151" rx="7" fill="#fcfcf9" class="ink"/><rect x="15" y="15" width="104" height="54" rx="3" fill="#e4eee6" class="fine"/><path d="M18 59l28-27 24 20 17-14 29 25" class="fine"/><path d="M17 86h100m-100 18h86m-86 18h57" class="fine"/><circle cx="130" cy="117" r="32" fill="#e1f0e8" stroke="#177d79" stroke-width="3"/><path d="M114 116l12 13 23-29" fill="none" stroke="#177d79" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text class="label" x="1247" y="567" text-anchor="middle">The same note, checked</text><text class="label" x="1247" y="594" text-anchor="middle">Saved fields · status · metrics</text><text class="tiny" x="1247" y="627" text-anchor="middle">A record you can return to</text>
+<!-- Sequence -->
+<path d="M350 461h32" class="ink" marker-end="url(#arrow)"/><path d="M702 461h32" class="ink" marker-end="url(#arrow)"/><path d="M1054 461h32" class="ink" marker-end="url(#arrow)"/>
+<!-- Recovery -->
+<path d="M1248 650v29Q1248 702 1225 702H567Q544 702 544 679v-17" fill="none" stroke="#177d79" stroke-width="2.7" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="710" y="684" width="379" height="33" rx="9" fill="#fcfcf7"/><text class="hand" x="900" y="707" text-anchor="middle" font-size="21">Interrupted? Check first, then continue.</text>
+<!-- Local data footer -->
+<rect x="153" y="752" width="1134" height="113" rx="24" fill="#f0f5ef" stroke="#177d79" stroke-width="2" stroke-dasharray="7 6"/>
+<g transform="translate(180 777)"><ellipse cx="24" cy="8" rx="23" ry="8" fill="#e1ece2" class="fine"/><path d="M1 8v43c0 11 46 11 46 0V8M1 27c0 11 46 11 46 0" class="fine"/><path d="M53 43l7 7 14-18" stroke="#177d79" stroke-width="3" fill="none" stroke-linecap="round"/></g>
+<text class="hand" x="279" y="790" font-size="27">Private by location</text><text class="label" x="279" y="825">Account settings, task history and receipts stay in your user data folder.</text>
+<text class="tiny" x="279" y="849">Your media stays in your workspace. GitHub distributes the reusable code.</text>
+<text class="hand" x="720" y="903" text-anchor="middle" font-size="22">A familiar workflow, ready for the next machine.</text>
+</svg>

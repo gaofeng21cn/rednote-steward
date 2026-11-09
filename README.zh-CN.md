@@ -1,0 +1,137 @@
+<p align="center">
+  <img src="assets/branding/rednote-steward-logo.png" alt="RedNote Steward 标志" width="132" />
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README.zh-CN.md"><strong>中文</strong></a>
+</p>
+
+<h1 align="center">RedNote Steward</h1>
+
+<p align="center"><strong>在同一个本地工作区里，发布、整理和维护你的小红书账号。</strong></p>
+<p align="center">照片 · 成品视频 · 历史帖子 · 发布记录</p>
+
+RedNote Steward 把准备好的素材、账号配置、发布任务和平台结果连在一起。你可以通过 Codex、标准 MCP 客户端或 `xhs-ops` 命令行使用它。它通过 OpenCLI 复用已登录的 Chrome，并在本机保存每项任务的进度。
+
+一组旅行照片、一季已制作完成的科普视频，或一篇旧帖的修订，都需要理清几件事：当前准备好的是哪一版、发到哪个账号、哪些已经提交、中断之后从哪里继续。Steward 把这些信息留在任务里，换一个对话或重新打开终端，也能接着处理。
+
+<p align="center">
+  <img src="assets/branding/rednote-steward-overview.png" alt="照片和视频进入本地账号队列，通过 OpenCLI 与 Chrome 发布，再回读同一篇平台笔记。CLI 与 MCP 共用控制器，个人数据留在本机。" width="100%" />
+</p>
+
+## 直接这样开始
+
+> “把这批已经做好的帖子按顺序发布，沿用各自的封面和文案，记录每篇的结果。”
+
+> “看一下哪些还在排队、哪些已经发布，哪些中断任务需要先核对平台。”
+
+> “检查一下这周随手发的旅行照片和帖子。保留我的语气，有必要的地方再优化；照片调整要忠于现场。”
+
+> “先把这些新版视频与之前的帖子对应起来，再决定哪些需要发布。”
+
+随项目安装的 Skill 帮助助手完成这些工作。账号偏好、内容判断和已有授权沿用你自己的工作区。
+
+## 能为你做什么
+
+| 工作 | Steward 提供的能力 |
+| --- | --- |
+| 准备发布 | 统一管理图文或视频内容包，包含文案、真实话题名称、可选封面与文件指纹 |
+| 管理账号 | 绑定稳定账号 ID 与浏览器 profile，写入前核对身份 |
+| 发布与编辑 | 本地任务队列、授权记录、计划时间，同一账号依次执行 |
+| 中断后继续 | 保存尝试记录、平台笔记 ID 与回读结果，先查清结果再执行下一次 |
+| 维护历史内容 | 读取清单与指标，编辑平台支持的文字、话题及图片，整理待复查内容 |
+| 换一个客户端 | CLI 与标准 MCP Server 共用控制器和任务数据库 |
+
+账号偏好和运维记录保存在安装代码之外，素材留在你选定的工作区。安装后按需运行，定期巡检或后台发布另行配置。
+
+## 在 macOS 上安装
+
+已有 Node.js 24+ 时，执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh | bash
+```
+
+安装器会安装程序、固定版本的 OpenCLI、随项目提供的适配器和通用 Skill。检测到 Codex 时，也会注册 MCP Server。安装器会准备 Browser Bridge 扩展文件，按输出指引在 Chrome 中启用扩展并登录小红书；已经连接的会话可以继续使用。
+
+把命令目录加入当前终端的 PATH，随后查询浏览器 profile 和账号：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+xhs-ops opencli profile list
+xhs-ops account probe --profile YOUR_PROFILE
+xhs-ops account add personal --user-id YOUR_USER_ID --profile YOUR_PROFILE
+xhs-ops doctor --account personal
+```
+
+账号 ID 使用 probe 返回的值，每个账号分别绑定自己的 profile。[安装说明](docs/installation.md)包含新机准备、MCP 客户端配置、升级和卸载方法。
+
+## 发布准备好的内容
+
+在素材旁边创建 `post.json`：
+
+```json
+{
+  "schemaVersion": 1,
+  "platform": "xiaohongshu",
+  "account": "personal",
+  "kind": "publish",
+  "title": "海边的一刻",
+  "body": "在这里写下自己的正文。",
+  "topics": [],
+  "images": ["photos/01.jpg", "photos/02.jpg"]
+}
+```
+
+检查内容包，加入队列并执行：
+
+```bash
+xhs-ops inspect ./post.json
+xhs-ops ingest ./post.json
+xhs-ops approve TASK_ID --authorization "发布这个已准备好的内容包" --now
+xhs-ops run TASK_ID
+xhs-ops show TASK_ID
+```
+
+助手可以依据你对这批内容已有的授权登记任务，`approve` 命令本身无需再增加一轮口头确认。视频使用 `video` 和可选的 `cover` 字段替代 `images`。话题名称写入 `topics`，发布时由适配器选择平台候选节点。
+
+视频包、旧帖编辑、计划时间和中断处理见[发布与恢复说明](docs/publishing.md)。[随仓示例](examples/)使用合成素材，不包含个人账号数据或真实帖子。
+
+## 连接 MCP 客户端
+
+标准 STDIO 服务入口为 `rednote-steward-mcp`：
+
+```json
+{
+  "mcpServers": {
+    "rednote-steward": {
+      "command": "rednote-steward-mcp"
+    }
+  }
+}
+```
+
+客户端未继承终端 PATH 时，填入已安装命令的绝对路径。CLI 与 MCP 共用账号配置和任务状态；长时间发布会返回任务 ID，随后可查询进度。
+
+## 当前范围
+
+首版面向 macOS，通过 OpenCLI 使用已登录的 Chrome。图文发布、旧帖维护、账号读取和内容清单沿用了已有本地工作流。适配器已包含视频和自定义封面的处理路径，自动化测试覆盖其执行流程；真实账号的视频发布还需要单独验收。平台页面变化时，适配器可能需要相应更新。
+
+当前交付包括 CLI、标准 MCP Server 和助手 Skill；图形化 MCP App 可在后续补充。内容生成和照片增强由你选用的工具完成，Steward 管理准备好的成果及其发布记录。
+
+## 文档与开发
+
+- [安装说明](docs/installation.md)：新用户、浏览器连接、MCP、升级和卸载。
+- [发布与恢复](docs/publishing.md)：内容包、编辑、任务状态与结果核对。
+- [架构说明](docs/architecture.md)：统一控制器、账号隔离与私人数据位置。
+- [助手 Skill](skills/rednote-steward/SKILL.md)：发布及账号维护方法。
+
+```bash
+npm ci
+npm test
+npm run check:package
+```
+
+## 许可
+
+采用 [Apache License 2.0](LICENSE)。OpenCLI 等复用组件的来源见 [NOTICE](NOTICE)。

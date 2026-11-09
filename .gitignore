@@ -1,0 +1,10 @@
+node_modules/
+.state/
+*.sqlite*
+*.db*
+receipts/
+*.log
+.env*
+.DS_Store
+coverage/
+*.tgz
