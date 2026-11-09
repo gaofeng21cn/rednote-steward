@@ -3,7 +3,7 @@
   "package_id": "rednote-steward",
   "display_name": "RedNote Steward",
   "publisher": "gaofeng21cn",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "source": "first_party_repo_local",
   "source_repo": "https://github.com/gaofeng21cn/rednote-steward.git",
   "package_role": "capability_package",
@@ -217,6 +217,6 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:315197840f78f97a2974c00f79eb2bfd1ad32e98ae4703d200dddea51e950d84"
+    "digest": "sha256:0cdfaa2a4196ac3fe9fecc4af35f4f9f68c0f299fe684204fbeb3d17bbd7aadb"
   }
 }

@@ -97,6 +97,13 @@ export function editArgs(task, { prepareOnly = false, keepTab = false } = {}) {
   if (task.images.length) args.push('--images', task.images.map(image => image.path).join(','));
   if (task.video) args.push('--video', task.video.path);
   if (task.cover) args.push('--cover', task.cover.path);
+  if (process.env.XHS_OPS_COVER_TIMEOUT != null) {
+    const seconds = Number(process.env.XHS_OPS_COVER_TIMEOUT);
+    if (!Number.isInteger(seconds) || seconds < 10 || seconds > 600) {
+      throw new Error('XHS_OPS_COVER_TIMEOUT must be between 10 and 600 seconds');
+    }
+    args.push('--cover-timeout', String(seconds));
+  }
   args.push(...declarationArgs(task), ...(prepareOnly ? ['--prepare-only', 'true'] : []),
     ...(keepTab ? ['--window', 'background', '--keep-tab', 'true', '-f', 'json'] : browserArgs));
   return args;

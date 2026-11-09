@@ -46,7 +46,7 @@ function selectionStateScript(filename, previousSources, confirm = false) {
   })()`;
 }
 
-export async function applyCover(page, cover) {
+export async function applyCover(page, cover, { previewTimeoutMs = 120_000 } = {}) {
   const filename = path.basename(cover);
   const before = await page.evaluate(previewSourceScript);
   const previewSelector = await page.evaluate(`() => {
@@ -100,7 +100,7 @@ export async function applyCover(page, cover) {
   }`);
   await attachFiles(page, [cover], selector);
   await waitFor(page, async () => Boolean(await page.evaluate(selectionStateScript(filename, previousSources))),
-    30_000, 500, 'custom cover preview');
+    previewTimeoutMs, 500, 'custom cover preview');
   const selected = await page.evaluate(selectionStateScript(filename, previousSources, true));
   if (!selected?.confirmationClicked || selected.filename !== filename) {
     throw new CommandExecutionError('Custom cover selection could not be confirmed; the cover stage remains unsubmitted');

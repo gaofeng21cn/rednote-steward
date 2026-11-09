@@ -119,10 +119,20 @@ When the package also includes `cover`, the creator UI may keep its cover
 confirmation disabled until the replacement video has itself been saved.
 Steward therefore saves the video and approved copy first, reads the saved video
 from the same note ID, then selects and saves the custom cover. Each stage invokes
-submission once. Final readback checks that the cover matches the selected resource
+submission once. The cover-preview check defaults to 120 seconds and can be
+changed with `--cover-timeout` (10-600 seconds) when the platform's processing
+time differs. Final readback checks that the cover matches the selected resource
 and differs from the cover saved before the cover stage. CDN host or signature
 changes alone do not count as a resource change; this comparison does not compare
 transformed image bytes.
+
+For recovery or maintenance, `cover` may be supplied without `video` on an
+existing video note. That path changes the approved copy, native topics and
+custom cover in one save while leaving the already-saved video untouched.
+The package must be an `edit` for an existing video note and cannot combine a
+cover-only change with replacement images. Set `XHS_OPS_COVER_TIMEOUT` to an
+integer from 10 to 600 when a slower platform preview needs a longer wait;
+the default is 120 seconds.
 
 The attempt retains stage and cover-selection evidence for read-only recovery if
 the final adapter response is lost. If a stage stops, inspect `show`, `handoff` and
@@ -170,7 +180,9 @@ After editing, inspect the task's readback of that same ID. Use field evidence t
 
 ## Interrupted tasks
 
-Ordinary adapter calls close their own browser tab after returning or failing.
+Ordinary adapter calls replace the unsaved document in their own browser tab,
+then close that exact tab after returning or failing. This avoids an interactive
+departure prompt without touching user tabs.
 `prepare-only` and explicit `--keep-tab true` preserve the page for inspection.
 Tab cleanup does not clear an uncertain task outcome; reconcile the same note
 before another write. User tabs and other sessions are outside the cleanup scope.

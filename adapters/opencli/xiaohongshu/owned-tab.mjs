@@ -12,23 +12,52 @@ function daemonSendCommand() {
 
 /**
  * Remove the exact Xiaohongshu adapter-owned tab instead of navigating it to
- * about:blank. OpenCLI 1.8.5's one-shot lease release otherwise hits an unsaved
- * editor's beforeunload prompt; Browser Bridge 1.0.26 supports close-owned-tab.
+ * about:blank. Before removal, replace its document in place so editor
+ * listeners cannot hold the tab open with a beforeunload prompt. Browser
+ * Bridge 1.0.26 then removes the known adapter tab by its owned lease identity.
  */
-export async function closeOwnedTab(page, { sendCommand } = {}) {
+export async function closeOwnedTab(page, { sendCommand, clearDocument } = {}) {
   if (typeof page?.session !== 'string' || !page.session.trim()) return { skipped: 'no-adapter-session' };
   if (page.surface !== 'adapter') return { skipped: 'not-adapter-surface' };
   const prefix = 'site:xiaohongshu:';
   if (!page.session.startsWith(prefix) || !page.session.slice(prefix.length).trim()) {
     return { skipped: 'not-xiaohongshu-adapter-session' };
   }
+  if (page.siteSession === 'persistent') return { skipped: 'persistent-session' };
   const send = sendCommand ?? await daemonSendCommand();
-  return send('close-owned-tab', {
-    session: page.session,
-    surface: 'adapter',
+  const scope = {
+    session: page.session, surface: 'adapter',
     ...(page.contextId ? { contextId: page.contextId } : {}),
     ...(page.windowMode ? { windowMode: page.windowMode } : {}),
-  });
+  };
+  let preparedForClose = false;
+  // Page records its target after navigation. An argument failure before that
+  // point must not create a new tab just to clear its document. The pinned
+  // Bridge rejects tab selection for borrowed leases before any mutation.
+  if (typeof page._page === 'string' && page._page && typeof (clearDocument ?? page.evaluate) === 'function') {
+    try {
+      const tabs = await send('tabs', { ...scope, op: 'list' });
+      if (!Array.isArray(tabs) || tabs.length !== 1 || tabs[0].page !== page._page) {
+        return { skipped: 'page-identity-mismatch', preparedForClose: false };
+      }
+      await send('tabs', { ...scope, op: 'select', page: page._page });
+      // document.open/close replaces the current document without navigation,
+      // which removes unsaved-editor event listeners before the tab is closed.
+      await (clearDocument ?? (source => page.evaluate(source)))(`(() => {
+        window.onbeforeunload = null;
+        document.open();
+        document.write('');
+        document.close();
+        return true;
+      })()`);
+      preparedForClose = true;
+    } catch {
+      // Closing the owned tab can still succeed when the document is already
+      // gone or no longer executable. Keep cleanup diagnostics secondary.
+    }
+  }
+  const result = await send('close-owned-tab', scope);
+  return { ...result, preparedForClose };
 }
 
 const explicitlyTrue = value => value === true || value === 'true';

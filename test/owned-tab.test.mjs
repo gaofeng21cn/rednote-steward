@@ -15,13 +15,71 @@ test('closeOwnedTab sends only the exact adapter session context', async () => {
   const result = await closeOwnedTab(page(), {
     sendCommand: async (...args) => { calls.push(args); return { closed: true }; },
   });
-  assert.deepEqual(result, { closed: true });
+  assert.deepEqual(result, { closed: true, preparedForClose: false });
   assert.deepEqual(calls, [[ 'close-owned-tab', {
     session: 'site:xiaohongshu:profile-1',
     surface: 'adapter',
     contextId: 'context-7',
     windowMode: 'background',
   } ]]);
+});
+
+test('closeOwnedTab replaces a dirty document before requesting exact tab removal', async () => {
+  const steps = [];
+  const result = await closeOwnedTab(page({
+    evaluate: async source => { steps.push(['evaluate', source]); return true; },
+    _page: 'target-7',
+  }), {
+    sendCommand: async (action, params) => {
+      steps.push(['send', action, params]);
+      return action === 'tabs' && params.op === 'list' ? [{ page: 'target-7' }] : { closed: true };
+    },
+  });
+  assert.deepEqual(result, { closed: true, preparedForClose: true });
+  assert.equal(steps.length, 4);
+  assert.equal(steps[1][2].op, 'select');
+  assert.equal(steps[2][0], 'evaluate');
+  assert.match(steps[2][1], /window\.onbeforeunload = null/);
+  assert.match(steps[2][1], /document\.open\(\)/);
+  assert.equal(steps[3][1], 'close-owned-tab');
+});
+
+test('document preparation failure still attempts exact tab cleanup', async () => {
+  let sends = 0;
+  const result = await closeOwnedTab(page({
+    evaluate: async () => { throw new Error('document already navigated'); },
+    _page: 'target-7',
+  }), {
+    sendCommand: async (action, params) => {
+      if (action === 'tabs') return params.op === 'list' ? [{ page: 'target-7' }] : {};
+      sends++; return { closed: true };
+    },
+  });
+  assert.deepEqual(result, { closed: true, preparedForClose: false });
+  assert.equal(sends, 1);
+});
+
+test('cleanup never evaluates an unvisited, borrowed, stale or persistent page', async () => {
+  for (const mode of ['unvisited', 'borrowed', 'stale', 'persistent']) {
+    let evaluations = 0;
+    const actions = [];
+    const result = await closeOwnedTab(page({
+      ...(mode === 'unvisited' ? {} : { _page: 'target-7' }),
+      ...(mode === 'persistent' ? { siteSession: 'persistent' } : {}),
+      evaluate: async () => { evaluations++; },
+    }), { sendCommand: async (action, params) => {
+      actions.push(action);
+      if (action === 'tabs' && params.op === 'list') return [{ page: mode === 'stale' ? 'other-target' : 'target-7' }];
+      if (action === 'tabs') throw new Error('bound_tab_mutation_blocked');
+      return { closed: true };
+    } });
+    assert.equal(evaluations, 0, mode);
+    if (mode === 'persistent') assert.equal(actions.length, 0);
+    else if (mode === 'stale') {
+      assert.deepEqual(result, { skipped: 'page-identity-mismatch', preparedForClose: false });
+      assert.deepEqual(actions, ['tabs']);
+    } else assert.equal(result.preparedForClose, false);
+  }
 });
 
 test('closeOwnedTab skips missing, browser-owned, and non-Xiaohongshu sessions', async () => {

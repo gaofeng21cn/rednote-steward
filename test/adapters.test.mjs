@@ -258,14 +258,20 @@ test('video readback uses the real cover preview instead of a decorative data im
 test('video edit rejects an image target before changing its fields or media', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-target-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
-  const video = path.join(dir, 'clip.mp4');
+  const video = path.join(dir, 'clip.mp4'), cover = path.join(dir, 'cover.png');
   await fs.writeFile(video, 'synthetic video');
+  await fs.writeFile(cover, 'synthetic image');
   const editor = videoEditor({ image: true });
   const command = getRegistry().get('xiaohongshu/edit-note');
   await assert.rejects(command.func(editor.page, { 'note-id': '000000000000000000000001',
     title: 'Example', content: 'Caption', video }), /existing video note/);
   assert.equal(editor.uploads(), 0);
   assert.match(editor.context.location.href, /noteType=video/);
+  const coverOnlyEditor = videoEditor({ image: true });
+  await assert.rejects(command.func(coverOnlyEditor.page, { 'note-id': '000000000000000000000001',
+    title: 'Example', content: 'Caption', cover }), /existing video note/);
+  assert.equal(coverOnlyEditor.uploads(), 0);
+  assert.match(coverOnlyEditor.context.location.href, /noteType=video/);
 });
 
 test('renewed CDN signatures and blob previews do not prove a changed saved video', () => {
@@ -317,8 +323,10 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     if (throwAtSubmit === observed.submissions) throw new Error('Connection lost after submit invocation');
     if (observed.submissions === 1) {
       persisted = { ...composer,
-        video: savedVideo === 'empty' ? '' : savedVideo === 'unchanged' ? persisted.video : 'https://example.invalid/revised.mp4',
-        cover: 'https://example.invalid/video-default-cover.jpg' };
+        video: observed.videoUploads === 0 ? persisted.video
+          : savedVideo === 'empty' ? '' : savedVideo === 'unchanged'
+            ? persisted.video : 'https://example.invalid/revised.mp4',
+        cover: observed.videoUploads === 0 ? composer.cover : 'https://example.invalid/video-default-cover.jpg' };
     } else {
       persisted = { ...composer, cover: savedCover === 'unchanged'
         ? persisted.cover : savedCover === 'different' ? 'https://example.invalid/other-cover.jpg'
@@ -379,8 +387,13 @@ async function stagedEditFixture(t, options = {}) {
   const video = path.join(dir, 'clip.mp4'), cover = path.join(dir, 'cover.png');
   await fs.writeFile(video, 'synthetic video'); await fs.writeFile(cover, 'synthetic image');
   const fixture = stagedVideoEditor(options);
-  return { ...fixture, run: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
-    { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', video, cover, ...extra }) };
+  return {
+    ...fixture,
+    run: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
+      { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', video, cover, ...extra }),
+    runCoverOnly: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
+      { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', cover, ...extra }),
+  };
 }
 
 test('video and cover save in two stages and verify the same reopened note', async t => {
@@ -395,6 +408,31 @@ test('video and cover save in two stages and verify the same reopened note', asy
   assert.equal(f.observed.videoUploads, 1); assert.equal(f.observed.coverUploads, 1);
   assert.equal(f.observed.coverConfirmations, 1); assert.equal(f.observed.opens.length, 3);
   assert.ok(f.observed.opens.every(url => url.includes('id=000000000000000000000001')));
+});
+
+test('custom cover timeout is configurable and invalid values fail before browser use', async t => {
+  const command = getRegistry().get('xiaohongshu/edit-note');
+  const option = command.args.find(arg => arg.name === 'cover-timeout');
+  assert.equal(option.default, 120);
+  const f = await stagedEditFixture(t);
+  await assert.rejects(f.run({ 'cover-timeout': 5 }), /cover-timeout must be between 10 and 600 seconds/);
+  assert.equal(f.observed.opens.length, 0);
+  assert.equal(f.observed.videoUploads, 0);
+  assert.equal(f.observed.coverUploads, 0);
+});
+
+test('a custom cover can be repaired without uploading the saved video again', async t => {
+  const f = await stagedEditFixture(t);
+  const [result] = await f.runCoverOnly();
+  assert.equal(result.status, 'updated');
+  assert.equal(result.replacement, null);
+  assert.equal(result.video.src, 'https://example.invalid/original.mp4');
+  assert.equal(result.cover.identityVerifiedAfterSave, true);
+  assert.equal(f.observed.submissions, 1);
+  assert.equal(f.observed.videoUploads, 0);
+  assert.equal(f.observed.coverUploads, 1);
+  assert.equal(f.observed.coverConfirmations, 1);
+  assert.equal(f.observed.opens.length, 2);
 });
 
 for (const savedVideo of ['unchanged', 'empty']) {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Install a released source snapshot and its locked dependencies into user space.
-version="v0.2.2"
+version="v0.2.3"
 source_dir=""
 skip_browser=0
 skip_integrations=0
@@ -16,7 +16,7 @@ while [ "$#" -gt 0 ]; do
     --skip-browser-setup) skip_browser=1; shift ;;
     --skip-integrations) skip_integrations=1; shift ;;
     --help|-h)
-      printf '%s\n' 'Usage: install.sh [--version v0.2.2] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
+      printf '%s\n' 'Usage: install.sh [--version v0.2.3] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
         'XHS_OPS_INSTALL_ROOT chooses the application directory; XHS_OPS_BIN_DIR chooses the command directory.'
       exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
@@ -25,7 +25,7 @@ done
 
 case "$version" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) printf 'Use a release tag such as v0.2.2: %s\n' "$version" >&2; exit 2 ;;
+  *) printf 'Use a release tag such as v0.2.3: %s\n' "$version" >&2; exit 2 ;;
 esac
 case "$version" in *[!a-zA-Z0-9._-]*) printf 'Invalid release tag\n' >&2; exit 2 ;; esac
 

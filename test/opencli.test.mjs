@@ -33,6 +33,21 @@ test('prepare-only keeps the explicit composer and declarations are opt-in', () 
   assert.equal(publishArgs({ ...base, images: [] }).includes('--original'), false);
   assert.throws(() => editArgs({ ...base, declarations: { original: 'true' } }), /must be a boolean/);
 });
+
+test('queued edits forward the configured cover wait and validate its range', () => {
+  const previous = process.env.XHS_OPS_COVER_TIMEOUT;
+  try {
+    process.env.XHS_OPS_COVER_TIMEOUT = '240';
+    const args = editArgs({ ...base, cover: { path: '/tmp/cover.png' } });
+    assert.equal(args.includes('--video'), false);
+    assert.equal(args[args.indexOf('--cover-timeout') + 1], '240');
+    process.env.XHS_OPS_COVER_TIMEOUT = '601';
+    assert.throws(() => editArgs(base), /between 10 and 600/);
+  } finally {
+    if (previous == null) delete process.env.XHS_OPS_COVER_TIMEOUT;
+    else process.env.XHS_OPS_COVER_TIMEOUT = previous;
+  }
+});
 test('progress decoding handles UTF-8, a trailing record and malformed or oversized lines', () => {
   const events = [], diagnostics = [];
   const reader = createProgressReader(event => events.push(event), value => diagnostics.push(value));

@@ -101,6 +101,8 @@ An assistant can record an existing authorization for the requested batch; the `
 
 Replacing an existing video and its custom cover uses two saves on the same note: video and copy first, then the cover. Stage evidence supports recovery without uploading the saved video again.
 
+For a cover-only repair, use an `edit` package with `cover` and no `video`; the saved video is checked and preserved. `XHS_OPS_COVER_TIMEOUT` can raise the preview wait from its 120-second default up to 600 seconds.
+
 See [publishing and recovery](docs/publishing.md) for video packages, edits, scheduling, and interrupted tasks. [Synthetic examples](examples/) contain no account data or real posts.
 
 ## Manage a Prepared Batch

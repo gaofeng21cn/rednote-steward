@@ -37,14 +37,16 @@ else if (['steward-publish','edit-note'].includes(command)) {
   const id = command === 'edit-note' ? args[2] : state.writes.toString(16).padStart(24, '0');
   const video = args.includes('--video');
   const previous = state.notes.find(note => note.noteId === id);
+  const videoNote = video || (command === 'edit-note' && args.includes('--cover') && previous?.mediaType === 'video');
   const stagedCover = command === 'edit-note' && video && args.includes('--cover');
   const topics = option('--topics').split(',').filter(Boolean).map((name, i) => ({ id: `topic-${i + 1}`, name }));
   const row = { noteId: id, title: option('--title'), body: command === 'edit-note' ? option('--content') : args[2], topics,
-    imageCount: args.includes('--images') ? option('--images').split(',').length : video ? 0 : 1,
-    mediaType: video ? 'video' : 'image', videoPresent: video,
+    imageCount: args.includes('--images') ? option('--images').split(',').length : videoNote ? 0 : 1,
+    mediaType: videoNote ? 'video' : 'image', videoPresent: videoNote,
     video: video ? (process.env.FAKE_MODE === 'keep-video' ? previous?.video
-      : { src: `https://example.invalid/video-${state.writes}.mp4`, duration: 65.13 }) : null,
-    cover: video ? (stagedCover ? { url: `https://example.invalid/auto-cover-${state.writes}.jpg` }
+      : { src: `https://example.invalid/video-${state.writes}.mp4`, duration: 65.13 })
+      : videoNote ? previous?.video : null,
+    cover: videoNote ? (stagedCover ? { url: `https://example.invalid/auto-cover-${state.writes}.jpg` }
       : args.includes('--cover')
       ? { url: `https://example.invalid/cover-${state.writes}.jpg` }
       : previous?.cover ?? { url: 'https://example.invalid/cover-original.jpg' }) : null,
@@ -65,6 +67,17 @@ else if (['steward-publish','edit-note'].includes(command)) {
     state.writes++;
     if (process.env.FAKE_MODE !== 'keep-cover') row.cover = { url: selected };
     save();
+  } else if (command === 'edit-note' && !video && args.includes('--cover')) {
+    preCoverSource = previous.cover?.url ?? null;
+    const selected = `https://example.invalid/custom-cover-${state.writes}.jpg`;
+    progress('prepared', { kind: 'edit', noteId: id, stage: 'cover-and-copy', preCoverSource,
+      savedVideoSource: previous.video?.src, cover: { previousSource: preCoverSource, source: selected,
+        filename: 'image.png', confirmationClicked: true, selectionVerified: true,
+        identityVerifiedAfterSave: false, bytesCompared: false } });
+    progress('submit_attempted', { kind: 'edit', noteId: id, stage: 'cover-and-copy', cover: {
+      preCoverSource, previousSource: preCoverSource, source: selected, confirmationClicked: true,
+      selectionVerified: true, identityVerifiedAfterSave: false } });
+    row.cover = { url: selected }; save();
   }
   if (['unknown','unknown-cover','keep-cover'].includes(process.env.FAKE_MODE)) { process.stderr.write('Connection lost after submission\n'); process.exitCode = 1; }
   else output([{ status: 'submitted', noteId: id, cover: args.includes('--cover') ? {

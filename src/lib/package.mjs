@@ -106,7 +106,9 @@ export async function inspectPackage(input) {
   const imagePaths = raw.images ?? [];
   if (imagePaths.length > 18) throw new Error('images supports at most 18 entries');
   if (raw.video && imagePaths.length) throw new Error('Choose video or images for one package');
-  if ((raw.cover || raw.subtitle) && !raw.video) throw new Error('cover and subtitle require video');
+  if (raw.subtitle && !raw.video) throw new Error('subtitle requires video');
+  if (raw.cover && !raw.video && kind !== 'edit') throw new Error('publish cover requires video');
+  if (raw.cover && imagePaths.length) throw new Error('Choose a video cover or replacement images for one package');
   const images = [];
   for (const [index, value] of imagePaths.entries()) images.push({ order: index + 1, ...await mediaFile(value, packageDir, 'image') });
   const video = raw.video ? await mediaFile(raw.video, packageDir, 'video') : null;
@@ -117,11 +119,12 @@ export async function inspectPackage(input) {
   if (raw.publishAt && Number.isNaN(Date.parse(raw.publishAt))) throw new Error('publishAt must be an ISO date');
   const warnings = [];
   if (/(^|\s)#\S+/.test(body)) warnings.push('Plain hashtags in the body do not create native topic associations.');
-  if (kind === 'edit' && !images.length && !video) warnings.push('Existing media will be preserved.');
+  if (kind === 'edit' && !images.length && !video) warnings.push(cover
+    ? 'The saved video will be preserved; its custom cover will change.' : 'Existing media will be preserved.');
   if (subtitle) warnings.push('Subtitle is a provenance asset. Use a final video with subtitles already rendered; separate subtitle upload is not supported.');
   const result = { schemaVersion: 1, manifestPath, packageDir, platform: 'xiaohongshu', kind, account,
     sourceNoteId, replacesNoteId, title, body, topics, images, imageCount: images.length,
-    video, cover, subtitle, mediaType: video ? 'video' : 'image',
+    video, cover, subtitle, mediaType: video || cover ? 'video' : 'image',
     seriesId, episode, contentType, declarations, mediaLineage,
     publishAt: raw.publishAt ? new Date(raw.publishAt).toISOString() : null,
     notes: text(raw.notes, 'notes', { required: false }), warnings };

@@ -60,3 +60,23 @@ test('rejects mixed image/video packages and accepts video edits', async t => {
   assert.equal(inspected.mediaType,'video');
   assert.equal(inspected.sourceNoteId,'000000000000000000000001');
 });
+
+test('an edit can change a video cover while preserving the saved video', async t => {
+  const dir = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001',
+    images: [], cover: 'image.png' });
+  const inspected = await inspectPackage(dir);
+  assert.equal(inspected.video, null);
+  assert.equal(inspected.mediaType, 'video');
+  assert.equal(inspected.cover.name, 'image.png');
+  assert.match(inspected.warnings.join(' '), /saved video will be preserved/);
+});
+
+test('cover-only packages require an edit and cannot mix with replacement images or subtitles', async t => {
+  const publish = await fixture(t, { images: [], cover: 'image.png' });
+  await assert.rejects(inspectPackage(publish), /publish cover requires video/);
+  const images = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', cover: 'image.png' });
+  await assert.rejects(inspectPackage(images), /video cover or replacement images/);
+  const subtitle = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001',
+    images: [], cover: 'image.png', subtitle: 'captions.srt' });
+  await assert.rejects(inspectPackage(subtitle), /subtitle requires video/);
+});
