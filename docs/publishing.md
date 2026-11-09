@@ -121,18 +121,21 @@ Steward therefore saves the video and approved copy first, reads the saved video
 from the same note ID, then selects and saves the custom cover. Each stage invokes
 submission once. The cover-preview check defaults to 120 seconds and can be
 changed with `--cover-timeout` (10-600 seconds) when the platform's processing
-time differs. Final readback checks that the cover matches the selected resource
-and differs from the cover saved before the cover stage. CDN host or signature
-changes alone do not count as a resource change; this comparison does not compare
-transformed image bytes.
+time differs. Final readback checks the recorded cover selection and a saved
+cover resource that differs from the cover before that stage. Xiaohongshu can
+transform the selected image to a new resource path. The receipt records path
+equality separately; image content remains untested. CDN host or signature changes
+alone do not count as a saved resource change.
 
 For recovery or maintenance, `cover` may be supplied without `video` on an
 existing video note. That path changes the approved copy, native topics and
 custom cover in one save while leaving the already-saved video untouched.
-The package must be an `edit` for an existing video note and cannot combine a
-cover-only change with replacement images. Set `XHS_OPS_COVER_TIMEOUT` to an
-integer from 10 to 600 when a slower platform preview needs a longer wait;
-the default is 120 seconds.
+CLI and MCP package ingestion accept this same edit package. Preflight requires an
+existing video note with a readable saved video resource; `images` cannot be combined
+with a custom cover. Set `XHS_OPS_COVER_TIMEOUT` to an integer from 10 to 600 seconds
+when the platform preview needs a longer wait; the default is 120 seconds. Verification
+requires a recorded cover selection, a changed saved cover resource, and the original
+saved video resource. Platform-transformed image bytes are not compared.
 
 The attempt retains stage and cover-selection evidence for read-only recovery if
 the final adapter response is lost. If a stage stops, inspect `show`, `handoff` and

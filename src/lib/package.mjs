@@ -107,8 +107,8 @@ export async function inspectPackage(input) {
   if (imagePaths.length > 18) throw new Error('images supports at most 18 entries');
   if (raw.video && imagePaths.length) throw new Error('Choose video or images for one package');
   if (raw.subtitle && !raw.video) throw new Error('subtitle requires video');
-  if (raw.cover && !raw.video && kind !== 'edit') throw new Error('publish cover requires video');
-  if (raw.cover && imagePaths.length) throw new Error('Choose a video cover or replacement images for one package');
+  if (raw.cover && !raw.video && kind !== 'edit') throw new Error('cover requires a video publish or an existing video edit');
+  if (raw.cover && !raw.video && imagePaths.length) throw new Error('A cover-only edit cannot replace images');
   const images = [];
   for (const [index, value] of imagePaths.entries()) images.push({ order: index + 1, ...await mediaFile(value, packageDir, 'image') });
   const video = raw.video ? await mediaFile(raw.video, packageDir, 'video') : null;

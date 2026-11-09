@@ -22,27 +22,29 @@ const previewSourceScript = `() => {
   return match?.[2] || image?.currentSrc || image?.src || '';
 }`;
 
-// This proves a selected local file and a fresh, decoded thumbnail in the
-// active cover dialog. Persisted cover identity is checked after note save.
+// The upload command attaches the selected file once. Some creator versions
+// remove its input after upload; retain the fresh decoded thumbnail evidence.
 function selectionStateScript(filename, previousSources, confirm = false) {
   return `(() => {
     const visible = el => Boolean(el && el.offsetParent !== null);
-    const input = document.querySelector(${JSON.stringify(INPUT_SELECTOR)});
     const dialog = document.querySelector(${JSON.stringify(ACTIVE_DIALOG_SELECTOR)});
-    if (!visible(dialog) || !input || !dialog.contains(input)) return null;
-    const filename = input.files?.[0]?.name || '';
-    if (filename !== ${JSON.stringify(filename)}) return null;
+    if (!visible(dialog)) return null;
+    const input = document.querySelector(${JSON.stringify(INPUT_SELECTOR)});
+    if (input && (!dialog.contains(input) || input.files?.[0]?.name !== ${JSON.stringify(filename)})) return null;
     const thumbnail = Array.from(dialog.querySelectorAll('img')).find(img => {
       const source = img.currentSrc || img.src || '';
-      return source && img.complete && img.naturalWidth > 0 && !${JSON.stringify(previousSources)}.includes(source);
+      return (img.classList?.contains('uploaded-thumbnail-img') || source.startsWith('blob:')) &&
+        source && img.complete && img.naturalWidth > 0 && !${JSON.stringify(previousSources)}.includes(source);
     });
-    if (!thumbnail || Array.from(dialog.querySelectorAll('[class*="loading"], [class*="uploading"]')).some(visible)) return null;
+    if (!thumbnail) return null;
     const buttons = Array.from(dialog.querySelectorAll('button, [role="button"]'))
       .filter(el => visible(el) && !el.disabled && !el.hasAttribute('disabled') &&
         el.getAttribute('aria-disabled') !== 'true' && /^(确定|完成|保存)$/.test((el.innerText || '').trim()));
     if (buttons.length !== 1) return null;
     ${confirm ? 'buttons[0].click();' : ''}
-    return { filename, thumbnailSource: thumbnail.currentSrc || thumbnail.src, confirmationClicked: ${confirm} };
+    return { filename: ${JSON.stringify(filename)}, thumbnailSource: thumbnail.currentSrc || thumbnail.src,
+      fileSelectionEvidence: input ? 'file-input' : 'attachment-acknowledged-and-fresh-thumbnail',
+      confirmationClicked: ${confirm} };
   })()`;
 }
 

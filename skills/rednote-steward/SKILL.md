@@ -60,8 +60,9 @@ When replacing both video and cover, the creator editor uses two saves: video an
 copy first, then the custom cover after reopening the same note. Each stage submits
 once. Read the saved stage evidence before recovery; an already-saved video must
 not be uploaded again to finish its cover. `prepare-only` leaves the cover stage
-pending. Final cover readback compares the saved resource with the selected cover
-and the saved cover before that stage; platform-transformed bytes remain untested.
+pending. Final cover readback requires the recorded selection and a saved resource
+change from before that stage. Platform transformation may change its path;
+resource equality and image content comparison are recorded separately.
 If only the cover needs repair, use an edit package with `cover` and no `video`.
 The controller reads the existing video first and the adapter changes only the
 cover and copy, so recovery never uploads an already-saved video again. The

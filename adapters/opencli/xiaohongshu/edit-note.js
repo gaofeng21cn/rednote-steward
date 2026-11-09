@@ -46,7 +46,8 @@ cli({
     const desiredDeclarations = validateDeclarations(kwargs);
     const prepareOnly = kwargs['prepare-only'] === true || kwargs['prepare-only'] === 'true';
     if (cover.length > 1) throw new CommandExecutionError('Choose at most one custom cover');
-    if ((video || cover.length) && images.length) throw new CommandExecutionError('Choose video or a video cover, or replacement images');
+    if (video && images.length) throw new CommandExecutionError('Choose replacement video or images, not both');
+    if (cover.length && images.length) throw new CommandExecutionError('A custom video cover cannot replace images');
     const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) {
       throw new CommandExecutionError('upload-timeout must be between 10 and 3600 seconds');
@@ -130,6 +131,7 @@ cli({
       stage: firstStage,
       ...(coverSelection ? { cover: coverSelection, preCoverSource: coverSelection.preCoverSource } : {}),
       ...(video && cover.length ? { pendingStages: ['cover-and-copy'] } : {}),
+      ...(coverSelection ? { cover: coverSelection } : {}),
       nativeTopicCount: prepared.topics.length, declarations: declarations.observed,
       composer: { url: prepared.url, observedAt: new Date().toISOString(), persistence: 'not-confirmed' } });
     if (prepareOnly) return [{ status: 'prepared', submitted: false, noteId, title: prepared.title,
@@ -203,9 +205,8 @@ cli({
 
     const preCoverSource = coverSelection?.preCoverSource ?? coverSelection?.previousSource ?? null;
     const savedCoverSource = videoSourceIdentity(after.cover?.url);
-    const selectedCoverSource = videoSourceIdentity(coverSelection?.source);
-    const coverSourceChanged = cover.length && preCoverSource && savedCoverSource && selectedCoverSource
-      ? videoSourceChanged(preCoverSource, after.cover?.url) && selectedCoverSource === savedCoverSource : !cover.length;
+    const coverSourceChanged = cover.length && preCoverSource && savedCoverSource
+      ? videoSourceChanged(preCoverSource, after.cover?.url) : !cover.length;
     const verified =
       after.title === title &&
       normalizeForComparison(after.body) === normalizeForComparison(content) &&
@@ -231,7 +232,8 @@ cli({
       images: String(after.imageCount),
       mediaType: after.mediaType, videoPresent: after.videoPresent, video: after.video,
       cover: coverSelection ? { ...coverSelection, preCoverSource, savedSource: savedCoverSource,
-        savedSourceChanged: Boolean(coverSourceChanged), identityVerifiedAfterSave: Boolean(coverSourceChanged),
+        savedSourceChanged: Boolean(coverSourceChanged), saveVerified: Boolean(coverSourceChanged),
+        identityVerifiedAfterSave: Boolean(savedCoverSource && savedCoverSource === videoSourceIdentity(coverSelection.source)),
         bytesCompared: false } : null,
       declarations,
       replacement: replacement ? { ...replacement, after: after.video,

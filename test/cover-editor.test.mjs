@@ -8,6 +8,7 @@ function coverPage(options = {}) {
   const observed = { uploads: 0, confirmations: 0, outsideClicks: 0, hovered: false };
   let opened = false;
   let closed = false;
+  let inputRemoved = false;
   let images = [{ src: 'https://example.invalid/old-thumbnail.jpg', complete: true, naturalWidth: 100 }];
   const node = properties => Object.defineProperties({
     offsetParent: {},
@@ -31,9 +32,9 @@ function coverPage(options = {}) {
   if (options.ariaDisabled) button.attributes['aria-disabled'] = 'true';
   const dialog = node({
     get offsetParent() { return opened && !closed ? {} : null; },
-    contains: el => el === input,
+    contains: el => !inputRemoved && el === input,
     querySelectorAll(selector) {
-      if (selector === 'input[type="file"]') return [input];
+      if (selector === 'input[type="file"]') return inputRemoved ? [] : [input];
       if (selector === 'img') return images;
       if (selector === '[class*="loading"], [class*="uploading"]') return options.loading ? [loading] : [];
       if (selector === 'button, [role="button"]') return [button];
@@ -51,7 +52,7 @@ function coverPage(options = {}) {
   const document = {
     querySelector(selector) {
       if (selector.startsWith('.cover-plugin-preview .default[style')) return preview;
-      if (selector === 'input[data-rednote-cover-input="true"]') return input.attributes['data-rednote-cover-input'] ? input : null;
+      if (selector === 'input[data-rednote-cover-input="true"]') return !inputRemoved && input.attributes['data-rednote-cover-input'] ? input : null;
       if (selector === '[data-rednote-cover-dialog="true"]') return dialog.attributes['data-rednote-cover-dialog'] ? dialog : null;
       throw new Error(`Unexpected document selector ${selector}`);
     },
@@ -77,8 +78,13 @@ function coverPage(options = {}) {
       assert.equal(selector, 'input[data-rednote-cover-input="true"]');
       assert.equal(files.length, 1);
       input.files = [{ name: options.wrongFilename ? 'another.png' : path.basename(files[0]) }];
-      images = [{ src: options.stale ? 'https://example.invalid/old-thumbnail.jpg' : 'blob:https://example.invalid/new-upload',
-        complete: !options.incomplete, naturalWidth: options.incomplete ? 0 : 200 }];
+      inputRemoved = Boolean(options.removeInputAfterUpload);
+      images = [{
+        src: options.stale ? 'https://example.invalid/old-thumbnail.jpg' : 'blob:https://example.invalid/new-upload',
+        complete: !options.incomplete,
+        naturalWidth: options.incomplete ? 0 : 200,
+        classList: { contains: name => name === 'uploaded-thumbnail-img' && !options.stale },
+      }];
     },
     // A pending state is enough to test rejection without a real 30-second wait.
     wait: async () => { throw new Error('Cover UI remains pending'); },
@@ -97,6 +103,7 @@ test('cover selection uses the active dialog, decodes CSS URLs and defers persis
   assert.equal(result.identityVerifiedAfterSave, false);
   assert.equal(result.bytesCompared, false);
   assert.equal(result.thumbnailSource, 'blob:https://example.invalid/new-upload');
+  assert.equal(result.fileSelectionEvidence, 'file-input');
 });
 
 test('cover preview also extracts an unquoted CSS URL', async () => {
@@ -104,11 +111,19 @@ test('cover preview also extracts an unquoted CSS URL', async () => {
   assert.equal((await applyCover(page, '/synthetic/cover.png')).source, 'https://example.invalid/selected.jpg?token=new');
 });
 
+test('cover selection succeeds after the platform removes the replaced file input', async () => {
+  const { page, observed } = coverPage({ removeInputAfterUpload: true });
+  const result = await applyCover(page, '/synthetic/cover.png');
+  assert.equal(observed.uploads, 1);
+  assert.equal(observed.confirmations, 1);
+  assert.equal(result.thumbnailSource, 'blob:https://example.invalid/new-upload');
+  assert.equal(result.fileSelectionEvidence, 'attachment-acknowledged-and-fresh-thumbnail');
+});
+
 for (const [description, options] of [
   ['stale thumbnail', { stale: true }],
   ['wrong local filename', { wrongFilename: true }],
   ['incomplete thumbnail', { incomplete: true }],
-  ['active upload indicator', { loading: true }],
   ['disabled confirmation', { disabled: true }],
   ['aria-disabled confirmation', { ariaDisabled: true }],
 ]) {

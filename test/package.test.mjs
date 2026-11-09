@@ -61,22 +61,23 @@ test('rejects mixed image/video packages and accepts video edits', async t => {
   assert.equal(inspected.sourceNoteId,'000000000000000000000001');
 });
 
-test('an edit can change a video cover while preserving the saved video', async t => {
-  const dir = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001',
-    images: [], cover: 'image.png' });
-  const inspected = await inspectPackage(dir);
+test('cover-only edits preserve video media type and reject incompatible content', async t => {
+  const coverOnly = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', images: [], cover: 'image.png' });
+  const inspected = await inspectPackage(coverOnly);
+  assert.equal(inspected.cover.name, 'image.png');
   assert.equal(inspected.video, null);
   assert.equal(inspected.mediaType, 'video');
-  assert.equal(inspected.cover.name, 'image.png');
   assert.match(inspected.warnings.join(' '), /saved video will be preserved/);
-});
-
-test('cover-only packages require an edit and cannot mix with replacement images or subtitles', async t => {
+  const mixed = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', cover: 'image.png' });
+  await fs.writeFile(path.join(mixed, 'second.png'), png);
+  await fs.writeFile(path.join(mixed, 'post.json'), JSON.stringify({
+    account: 'demo', kind: 'edit', sourceNoteId: '000000000000000000000001', title: '城市随记',
+    body: '街角遇到一家旧书店。', topics: [], images: ['second.png'], cover: 'image.png',
+  }));
+  await assert.rejects(() => inspectPackage(mixed), /cover-only edit cannot replace images/);
   const publish = await fixture(t, { images: [], cover: 'image.png' });
-  await assert.rejects(inspectPackage(publish), /publish cover requires video/);
-  const images = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', cover: 'image.png' });
-  await assert.rejects(inspectPackage(images), /video cover or replacement images/);
+  await assert.rejects(() => inspectPackage(publish), /cover requires a video publish/);
   const subtitle = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001',
     images: [], cover: 'image.png', subtitle: 'captions.srt' });
-  await assert.rejects(inspectPackage(subtitle), /subtitle requires video/);
+  await assert.rejects(() => inspectPackage(subtitle), /subtitle requires video/);
 });

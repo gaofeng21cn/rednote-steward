@@ -107,26 +107,28 @@ export function compareReadback(task, row, publication = null) {
   const baseline = task.baseline_note;
   if (task.video || task.cover) {
     checks.media = row?.mediaType === 'video' && row?.videoPresent === true && Boolean(row.video?.src);
-    if (task.kind === 'edit') {
-      if (task.video) checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
-      else checks.videoPreserved = Boolean(videoSourceIdentity(baseline?.video?.src)
-        && videoSourceIdentity(baseline.video.src) === videoSourceIdentity(row?.video?.src));
+    if (task.kind === 'edit' && task.video) {
+      checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
       const preparedDuration = publication?.replacement?.prepared?.duration;
       if (preparedDuration > 0 && row?.video?.duration > 0) {
         checks.videoDuration = Math.abs(row.video.duration - preparedDuration) <= 0.5;
       }
+    } else if (task.kind === 'edit' && task.cover) {
+      checks.videoPreserved = Boolean(videoSourceIdentity(baseline?.video?.src)
+        && videoSourceIdentity(baseline.video.src) === videoSourceIdentity(row?.video?.src));
     }
     if (task.cover) {
       if (task.kind === 'edit') {
         const staged = publication?.cover || {};
         const preCoverSource = staged.preCoverSource;
-        const selectedSource = videoSourceIdentity(staged.source);
         const savedSource = videoSourceIdentity(row?.cover?.url);
-        const coverSourceChanged = videoSourceChanged(preCoverSource, row?.cover?.url)
-          && Boolean(selectedSource && savedSource && selectedSource === savedSource);
+        // Xiaohongshu may transcode the selected image to a different resource path.
+        const coverSourceChanged = videoSourceChanged(preCoverSource, row?.cover?.url) && Boolean(savedSource);
         checks.customCover = Boolean(
-          staged.confirmationClicked
-          && (staged.identityVerifiedAfterSave === true || staged.submissionAttempted === true)
+          staged.selectionVerified
+          && staged.confirmationClicked
+          && typeof staged.source === 'string' && /^(https?:|blob:)/.test(staged.source)
+          && (staged.saveVerified === true || staged.identityVerifiedAfterSave === true || staged.submissionAttempted === true)
           && coverSourceChanged
           && row?.cover?.url
         );
@@ -148,7 +150,7 @@ export function compareReadback(task, row, publication = null) {
       videoReplacement: task.kind === 'edit' && task.video
         ? (checks.videoReplacement ? 'saved-source-changed; bytes-not-compared' : 'unconfirmed') : 'not-requested',
       customCover: task.cover ? (checks.customCover
-        ? task.kind === 'edit' ? 'selected-source-saved; bytes-not-compared' : 'selection-confirmed-and-cover-present'
+        ? task.kind === 'edit' ? 'selection-confirmed-and-saved-resource-changed; transformed-bytes-not-compared' : 'selection-confirmed-and-cover-present'
         : 'not-confirmed') : 'not-requested',
       declarations: expectedDeclarations ? (checks.declarations ? 'saved-composer-controls-match' : 'saved fields unconfirmed') : 'not-requested',
       publicVisibility: 'not-evaluated', moderation: 'not-evaluated' },
@@ -633,7 +635,7 @@ export class Controller {
       if (absent) {
         if (!String(reason ?? '').trim()) throw new Error('--absent requires --reason describing the inspected note and composer');
         const current = rowOf(resultData(await readNote(task.source_note_id, task.browser_profile,
-          task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal'), 'Unchanged edit target'));
+          task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal'), 'Unchanged edit target'));
         if (!unchangedNote(task.baseline_note, current)) {
           throw new Error('The edit target changed or its baseline is incomplete; inspect the saved note before retrying');
         }
@@ -684,7 +686,7 @@ export class Controller {
   handoff(id) {
     const { task, events } = this.show(id);
     const publication = stagedPublication(task, events);
-    const stagedCover = task.kind === 'edit' && task.video && task.cover && publication?.cover?.preCoverSource;
+    const stagedCover = task.kind === 'edit' && task.cover && publication?.cover?.preCoverSource;
     return { ok: true, taskId: id, fingerprint: task.fingerprint, revision: reviewRevision(task),
       account: task.account, accountUserId: task.account_user_id, browserProfile: task.browser_profile,
       title: task.title, body: task.body, topics: task.topics, images: task.images,
@@ -694,7 +696,7 @@ export class Controller {
         phase: task.phase, source: 'local-task', composerReuse: 'requires-live-inspection',
         ...(publication?.cover ? { coverStage: publication.cover } : {}) },
       next: stagedCover
-        ? `The replacement video was saved. Inspect and complete only the cover on this same note; keep the saved video. Read back with xhs-ops reconcile ${id}. Without recorded selected-cover source evidence, the cover remains needs_review.`
+        ? `Inspect the cover on this same note and keep the saved video. Read back with xhs-ops reconcile ${id} before another submission. Without recorded selected-cover source evidence, the cover remains needs_review.`
         : `After completing this exact package manually, link its note ID with xhs-ops link-existing ${id} --note-id NOTE_ID --reason TEXT.` };
   }
   async linkExisting(id, { noteId, reason } = {}) {
@@ -718,7 +720,7 @@ export class Controller {
     try {
     await verifiedIdentity(account);
     const publication = stagedPublication(task, events);
-    const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
+    const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
     const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Manual publication readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
     if (!verification.checks.noteId || !verification.checks.title || !verification.checks.body || !verification.checks.topics) {
