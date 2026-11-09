@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { openDatabase, transaction } from './db.mjs';
+import { registerAccountOwner } from './owner.mjs';
 
 export function stateRoot() {
   return path.resolve(process.env.XHS_OPS_HOME || path.join(os.homedir(), '.local', 'share', 'rednote-steward'));
@@ -40,6 +41,7 @@ export function addAccount({ alias, userId, profile, name = '' }) {
       throw new Error('This user ID or browser profile is already bound to another alias');
     }
     const account = { alias, userId, profile, name: String(name) };
+    registerAccountOwner(account, { home: stateRoot() });
     const updated = [...accounts.filter(item => item.alias !== alias), account];
     const temp = `${accountFile()}.${randomUUID()}.tmp`;
     fs.writeFileSync(temp, `${JSON.stringify({ schemaVersion: 1, accounts: updated }, null, 2)}\n`, { mode: 0o600 });
