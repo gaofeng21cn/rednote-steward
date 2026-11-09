@@ -6,7 +6,7 @@ import { openDatabase, transaction, addEvent, rowToTask, claimTask } from './db.
 import { inspectPackage, verifyFrozenPackage, normalizeText } from './package.mjs';
 import { publishArgs, editArgs, readInventory, readNote, readMetrics, runOpencli, verifiedIdentity, rowOf } from './opencli.mjs';
 import { auditRows, reviewCandidates } from './audit.mjs';
-import { videoSourceChanged } from './media.mjs';
+import { videoSourceChanged, videoSourceIdentity } from './media.mjs';
 
 const now = () => new Date().toISOString();
 const serialize = value => value == null ? null : JSON.stringify(value);
@@ -21,6 +21,34 @@ function checkNoteId(id) {
 function activeProcess(pid) {
   if (!pid) return false;
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
+}
+
+function unchangedNote(before, after) {
+  const fieldsReadable = row => row?.verification?.title === true && row?.verification?.body === true
+    && row?.verification?.nativeTopics === true && Array.isArray(row.topics)
+    && row.topics.every(topic => topic?.id && topic?.name);
+  if (!fieldsReadable(before) || !fieldsReadable(after) || before.noteId !== after.noteId) return false;
+  const topics = row => JSON.stringify((row.topics || []).map(topic => [topic.id, topic.name]).sort());
+  if (before.title !== after.title || normalizeText(before.body) !== normalizeText(after.body)
+    || topics(before) !== topics(after) || before.mediaType !== after.mediaType) return false;
+  const source = videoSourceIdentity;
+  if (before.mediaType === 'video') {
+    if (!before.videoPresent || !after.videoPresent || !source(before.video?.src)
+      || source(before.video.src) !== source(after.video?.src)
+      || !(before.video?.duration > 0) || !(after.video?.duration > 0)
+      || Math.abs(before.video.duration - after.video.duration) > 0.25) return false;
+  } else if (before.mediaType === 'image') {
+    if (before.verification.imageCount !== true || after.verification.imageCount !== true
+      || before.imageCount !== after.imageCount || !before.images?.length
+      || before.images.length !== before.imageCount || after.images?.length !== before.images.length) return false;
+    for (let index = 0; index < before.images.length; index++) {
+      if (!source(before.images[index].url) || source(before.images[index].url) !== source(after.images[index].url)) return false;
+    }
+  } else return false;
+  if (before.cover?.url || after.cover?.url) {
+    if (!source(before.cover?.url) || source(before.cover.url) !== source(after.cover?.url)) return false;
+  }
+  return true;
 }
 export function compareReadback(task, row, publication = null) {
   const expectedId = task.platform_note_id || task.source_note_id;
@@ -259,8 +287,18 @@ export class Controller {
     if (noteId) checkNoteId(noteId);
     const publication = [...events].reverse().find(event => event.event === 'adapter_finished')?.payload?.publication ?? null;
     if (task.kind === 'edit') {
-      if (absent) throw new Error('An existing edit target cannot be declared absent; inspect and resolve the note fields');
       if (noteId && noteId !== task.source_note_id) throw new Error('Reconcile an edit using its original note ID');
+      if (absent) {
+        if (!String(reason ?? '').trim()) throw new Error('--absent requires --reason describing the inspected note and composer');
+        const current = rowOf(resultData(await readNote(task.source_note_id, task.browser_profile,
+          task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal'), 'Unchanged edit target'));
+        if (!unchangedNote(task.baseline_note, current)) {
+          throw new Error('The edit target changed or its baseline is incomplete; inspect the saved note before retrying');
+        }
+        this.update(id, 'failed', { last_error: `Operator confirmed no edit applied: ${reason}`, readback_json: serialize(current) },
+          'unchanged_edit_confirmed', { reason, noteId: task.source_note_id });
+        return { ok: true, taskId: id, state: 'failed', retryRequiresAuthorization: true };
+      }
       noteId = task.source_note_id;
     } else if (!noteId) {
       noteId = task.platform_note_id || await this.findPublished(task, publication, 1);

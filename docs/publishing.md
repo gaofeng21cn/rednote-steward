@@ -147,6 +147,11 @@ xhs-ops reconcile TASK_ID --absent --reason "Checked the account inventory and t
 
 Only use the absence path after checking. A timeout by itself says nothing about whether the platform accepted the post. Re-authorize a cleared task for a new attempt only when the original requested scope still applies.
 
+For an edit, `--absent` means that the requested update was not applied. Steward reads the
+same note and compares its fields, native topics and media with the saved pre-edit snapshot.
+An unchanged target can be cleared for a new authorized attempt after the operator has
+inspected its composer. A missing baseline or a partially changed note remains unresolved.
+
 A `verified` task means the fields required by the verifier matched the available platform readback. A submission with incomplete readback retains its explicit evidence gap. Media counts and presence do not prove that transformed platform files have the same bytes as the local source.
 
 The controller passes its time budget to OpenCLI's browser command timeout, leaving a small

@@ -132,7 +132,7 @@ test('plain topic text and missing custom-cover confirmation never produce verif
   const task={title:'Example',body:'Caption',topics:['城市漫步'],images:[{sha256:'synthetic'}],platform_note_id:'000000000000000000000001'};
   const row={noteId:task.platform_note_id,title:task.title,body:task.body,topics:['城市漫步'],imageCount:1,mediaType:'image',verification:{title:true,body:true,nativeTopics:true,imageCount:true}};
   assert.equal(compareReadback(task,row).matched,false);
-  const videoTask={...task,images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
+  const videoTask={...task,kind:'publish',images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
   const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,video:{duration:65.13},cover:{url:'https://example.invalid/cover'}};
   assert.equal(compareReadback(videoTask,videoRow).matched,false);
   assert.equal(compareReadback(videoTask,videoRow,{cover:{confirmationClicked:true}}).matched,true);
@@ -204,4 +204,33 @@ test('a video replacement cannot write to an image note', async t => {
   assert.equal(result.json.state, 'failed');
   assert.match(result.json.error, /existing video note/);
   assert.equal((await platform(f.env)).writes, 0);
+});
+
+test('an unchanged edit can be cleared only after reading its saved baseline', async t => {
+  const f = await videoEdit(t);
+  const original = (await platform(f.env)).notes[0];
+  const db = openDatabase(path.join(f.env.XHS_OPS_HOME, 'xhs-ops.sqlite'));
+  db.prepare("UPDATE tasks SET state='needs_review',baseline_note_json=?,write_started_at=? WHERE id=?")
+    .run(JSON.stringify(original), new Date().toISOString(), f.id);
+  db.close();
+  const cleared = await command(['reconcile', f.id, '--absent', '--reason',
+    'Inspected the unchanged note and composer; no replacement remains in progress.'], f.env);
+  assert.equal(cleared.json.state, 'failed', JSON.stringify(cleared));
+  assert.equal(cleared.json.retryRequiresAuthorization, true);
+  assert.equal((await platform(f.env)).writes, 0);
+});
+
+test('operator absence cannot override a changed edit target or missing baseline', async t => {
+  const f = await videoEdit(t);
+  const original = (await platform(f.env)).notes[0];
+  const db = openDatabase(path.join(f.env.XHS_OPS_HOME, 'xhs-ops.sqlite'));
+  db.prepare("UPDATE tasks SET state='needs_review',baseline_note_json=? WHERE id=?").run(JSON.stringify(original), f.id);
+  const changed = { ...original, body: 'A saved partial revision' };
+  await fs.writeFile(f.env.FAKE_OPENCLI_STATE, JSON.stringify({ notes: [changed], writes: 0 }));
+  const refused = await command(['reconcile', f.id, '--absent', '--reason', 'No change expected'], f.env);
+  assert.match(refused.stderr, /target changed/);
+  db.prepare('UPDATE tasks SET baseline_note_json=NULL WHERE id=?').run(f.id);
+  db.close();
+  const noBaseline = await command(['reconcile', f.id, '--absent', '--reason', 'No change expected'], f.env);
+  assert.match(noBaseline.stderr, /baseline is incomplete/);
 });

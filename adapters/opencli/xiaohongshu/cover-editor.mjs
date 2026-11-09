@@ -57,4 +57,3 @@ export async function applyCover(page, cover) {
   }`)), 10_000, 400, 'cover confirmation');
   return { ...selected, identityVerifiedAfterSave: false };
 }
-
