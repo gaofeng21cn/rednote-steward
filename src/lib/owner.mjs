@@ -99,7 +99,10 @@ export function inspectAccountOwner(account, options = {}) {
   if (!db) return { state: 'unregistered', home: owner.home, owners: [], leases: [], conflicts: [] };
   try {
     const owners = matching(db, 'account_owners', owner);
-    const leases = matching(db, 'write_leases', owner).map(row => ({ ...row, process_active: activeLease(row) }));
+    const leases = matching(db, 'write_leases', owner).map(row => {
+      const active = activeLease(row);
+      return { ...row, process_active: active, observed_state: row.state === 'active' && !active ? 'stale_unknown' : row.state };
+    });
     const conflicts = owners.filter(row => row.home !== owner.home || row.account_user_id !== owner.accountUserId || row.browser_profile !== owner.browserProfile);
     return { state: conflicts.length ? 'conflict' : owners.length ? 'owned' : 'unregistered', home: owner.home, owners, leases, conflicts };
   } finally { db.close(); }

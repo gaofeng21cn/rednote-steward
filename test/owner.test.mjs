@@ -66,7 +66,9 @@ test('a dead writer still requires platform reconciliation before another lease'
   const child = spawnSync(process.execPath, ['--input-type=module', '-e',
     `import {acquireAccountWrite} from ${JSON.stringify(ownerModule)}; acquireAccountWrite(${JSON.stringify(input)});`], { env: process.env, encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
-  assert.equal(inspectAccountOwner(account, { home: f.home }).leases[0].process_active, false);
+  const observed = inspectAccountOwner(account, { home: f.home }).leases[0];
+  assert.equal(observed.process_active, false);
+  assert.equal(observed.observed_state, 'stale_unknown');
   assert.throws(() => acquireAccountWrite({ ...account, home: f.home, taskId: 'xhs_next' }), /reconcile/);
   const resolved = resolveAccountWrite({ ...input, reason: 'same note found and verified' });
   assert.equal(resolved.leases, 1);
