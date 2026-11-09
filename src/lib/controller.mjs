@@ -105,14 +105,17 @@ export function compareReadback(task, row, publication = null) {
   if (expectedDeclarations) checks.declarations = row?.declarations?.verification === 'saved-composer-controls'
     && Object.entries(expectedDeclarations).every(([key,value]) => row.declarations.values?.[key] === value);
   const baseline = task.baseline_note;
-  if (task.video) {
+  if (task.video || task.cover) {
     checks.media = row?.mediaType === 'video' && row?.videoPresent === true && Boolean(row.video?.src);
-    if (task.kind === 'edit') {
+    if (task.kind === 'edit' && task.video) {
       checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
       const preparedDuration = publication?.replacement?.prepared?.duration;
       if (preparedDuration > 0 && row?.video?.duration > 0) {
         checks.videoDuration = Math.abs(row.video.duration - preparedDuration) <= 0.5;
       }
+    } else if (task.kind === 'edit' && task.cover) {
+      checks.videoPreserved = Boolean(videoSourceIdentity(baseline?.video?.src)
+        && videoSourceIdentity(baseline.video.src) === videoSourceIdentity(row?.video?.src));
     }
     if (task.cover) {
       if (task.kind === 'edit') {
@@ -425,11 +428,11 @@ export class Controller {
   }
   async completeReadback(task, noteId, publication = null, { reservation = null } = {}) {
     checkNoteId(noteId);
-    const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
+    const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
     const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Note readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
     const state = verification.matched ? 'verified'
-      : task.kind === 'edit' && task.video && task.cover ? 'needs_review' : 'submitted';
+      : task.kind === 'edit' && task.cover ? 'needs_review' : 'submitted';
     const error = verification.matched ? null : 'Submission located; some requested fields still need review';
     if (reservation) {
       this.withDatabase(db => transaction(db, () => {
@@ -513,21 +516,22 @@ export class Controller {
         if (!Array.isArray(rows)) throw new Error('Pre-submit inventory is not an array');
         beforeIds = rows.map(row => String(row.id));
       } else {
-        beforeNote = rowOf(resultData(await readNote(task.source_note_id, account.profile, task.video ? 'video' : 'normal'), 'Pre-edit note'));
+        beforeNote = rowOf(resultData(await readNote(task.source_note_id, account.profile, task.video || task.cover ? 'video' : 'normal'), 'Pre-edit note'));
         if (beforeNote?.noteId !== task.source_note_id) throw new Error('Pre-edit note ID mismatch');
         if (task.images.length && beforeNote.mediaType === 'video') throw new Error('Video notes cannot replace media with images');
         if (task.video && beforeNote.mediaType !== 'video') throw new Error('Video replacement requires an existing video note');
+        if (task.cover && beforeNote.mediaType !== 'video') throw new Error('Custom covers require an existing video note');
       }
       task = { ...task, baseline_ids: beforeIds, baseline_note: beforeNote };
       this.withDatabase(db => transaction(db, () => {
         db.prepare('UPDATE tasks SET baseline_ids_json=?,baseline_note_json=?,write_started_at=?,updated_at=? WHERE id=?')
           .run(serialize(beforeIds), serialize(beforeNote), now(), now(), id);
-        addEvent(db, id, 'submission_started', { accountUserId: account.userId, mediaType: task.video ? 'video' : 'image' });
+        addEvent(db, id, 'submission_started', { accountUserId: account.userId, mediaType: task.video || task.cover ? 'video' : 'image' });
       }));
       writeStarted = true;
       this.phase(id, 'adapter_started', { prepareOnly });
       const args = task.kind === 'edit' ? editArgs(task, { prepareOnly, keepTab: prepareOnly }) : publishArgs(task, { prepareOnly, keepTab: prepareOnly });
-      const response = await runOpencli(args, { profile: account.profile, timeoutMs: task.video ? 1_200_000 : 300_000,
+      const response = await runOpencli(args, { profile: account.profile, timeoutMs: task.video || task.cover ? 1_200_000 : 300_000,
         onSpawn: pid => this.withDatabase(db => db.prepare('UPDATE tasks SET adapter_pid=? WHERE id=?').run(pid, id)),
         onProgress: event => {
           if (event?.phase) this.phase(id, event.phase, { ...event.detail, attemptId: task.attempt_id });
@@ -628,7 +632,7 @@ export class Controller {
       if (absent) {
         if (!String(reason ?? '').trim()) throw new Error('--absent requires --reason describing the inspected note and composer');
         const current = rowOf(resultData(await readNote(task.source_note_id, task.browser_profile,
-          task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal'), 'Unchanged edit target'));
+          task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal'), 'Unchanged edit target'));
         if (!unchangedNote(task.baseline_note, current)) {
           throw new Error('The edit target changed or its baseline is incomplete; inspect the saved note before retrying');
         }
@@ -679,7 +683,7 @@ export class Controller {
   handoff(id) {
     const { task, events } = this.show(id);
     const publication = stagedPublication(task, events);
-    const stagedCover = task.kind === 'edit' && task.video && task.cover && publication?.cover?.preCoverSource;
+    const stagedCover = task.kind === 'edit' && task.cover && publication?.cover?.preCoverSource;
     return { ok: true, taskId: id, fingerprint: task.fingerprint, revision: reviewRevision(task),
       account: task.account, accountUserId: task.account_user_id, browserProfile: task.browser_profile,
       title: task.title, body: task.body, topics: task.topics, images: task.images,
@@ -689,7 +693,7 @@ export class Controller {
         phase: task.phase, source: 'local-task', composerReuse: 'requires-live-inspection',
         ...(publication?.cover ? { coverStage: publication.cover } : {}) },
       next: stagedCover
-        ? `The replacement video was saved. Inspect and complete only the cover on this same note; keep the saved video. Read back with xhs-ops reconcile ${id}. Without recorded selected-cover source evidence, the cover remains needs_review.`
+        ? `Inspect the cover on this same note and keep the saved video. Read back with xhs-ops reconcile ${id} before another submission. Without recorded selected-cover source evidence, the cover remains needs_review.`
         : `After completing this exact package manually, link its note ID with xhs-ops link-existing ${id} --note-id NOTE_ID --reason TEXT.` };
   }
   async linkExisting(id, { noteId, reason } = {}) {
@@ -713,7 +717,7 @@ export class Controller {
     try {
     await verifiedIdentity(account);
     const publication = stagedPublication(task, events);
-    const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
+    const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
     const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Manual publication readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
     if (!verification.checks.noteId || !verification.checks.title || !verification.checks.body || !verification.checks.topics) {

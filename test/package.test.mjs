@@ -60,3 +60,18 @@ test('rejects mixed image/video packages and accepts video edits', async t => {
   assert.equal(inspected.mediaType,'video');
   assert.equal(inspected.sourceNoteId,'000000000000000000000001');
 });
+
+test('accepts a cover-only edit while rejecting cover plus image replacement', async t => {
+  const coverOnly = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', images: [], cover: 'image.png' });
+  const inspected = await inspectPackage(coverOnly);
+  assert.equal(inspected.cover.name, 'image.png');
+  assert.equal(inspected.video, null);
+  assert.equal(inspected.mediaType, 'video');
+  const mixed = await fixture(t, { kind: 'edit', sourceNoteId: '000000000000000000000001', cover: 'image.png' });
+  await fs.writeFile(path.join(mixed, 'second.png'), png);
+  await fs.writeFile(path.join(mixed, 'post.json'), JSON.stringify({
+    account: 'demo', kind: 'edit', sourceNoteId: '000000000000000000000001', title: '城市随记',
+    body: '街角遇到一家旧书店。', topics: [], images: ['second.png'], cover: 'image.png',
+  }));
+  await assert.rejects(() => inspectPackage(mixed), /cover-only edit cannot replace images/);
+});

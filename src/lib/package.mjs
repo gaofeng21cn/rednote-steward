@@ -106,7 +106,9 @@ export async function inspectPackage(input) {
   const imagePaths = raw.images ?? [];
   if (imagePaths.length > 18) throw new Error('images supports at most 18 entries');
   if (raw.video && imagePaths.length) throw new Error('Choose video or images for one package');
-  if ((raw.cover || raw.subtitle) && !raw.video) throw new Error('cover and subtitle require video');
+  if (raw.subtitle && !raw.video) throw new Error('subtitle requires video');
+  if (raw.cover && !raw.video && kind !== 'edit') throw new Error('cover requires a video publish or an existing video edit');
+  if (raw.cover && !raw.video && imagePaths.length) throw new Error('A cover-only edit cannot replace images');
   const images = [];
   for (const [index, value] of imagePaths.entries()) images.push({ order: index + 1, ...await mediaFile(value, packageDir, 'image') });
   const video = raw.video ? await mediaFile(raw.video, packageDir, 'video') : null;
@@ -121,7 +123,7 @@ export async function inspectPackage(input) {
   if (subtitle) warnings.push('Subtitle is a provenance asset. Use a final video with subtitles already rendered; separate subtitle upload is not supported.');
   const result = { schemaVersion: 1, manifestPath, packageDir, platform: 'xiaohongshu', kind, account,
     sourceNoteId, replacesNoteId, title, body, topics, images, imageCount: images.length,
-    video, cover, subtitle, mediaType: video ? 'video' : 'image',
+    video, cover, subtitle, mediaType: video || cover ? 'video' : 'image',
     seriesId, episode, contentType, declarations, mediaLineage,
     publishAt: raw.publishAt ? new Date(raw.publishAt).toISOString() : null,
     notes: text(raw.notes, 'notes', { required: false }), warnings };

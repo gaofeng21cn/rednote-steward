@@ -8,6 +8,7 @@ import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, up
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
 import { sameTopics, replaceVideo, readEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
+import { PROGRESS_PREFIX } from '../src/lib/progress.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
 import { getRegistry } from '@jackwener/opencli/registry';
 import '../adapters/opencli/xiaohongshu/inventory.js';
@@ -423,6 +424,17 @@ test('custom cover timeout is configurable and invalid values fail before browse
 
 test('a custom cover can be repaired without uploading the saved video again', async t => {
   const f = await stagedEditFixture(t);
+  const events = [];
+  const previousProgress = process.env.XHS_OPS_PROGRESS;
+  process.env.XHS_OPS_PROGRESS = '1';
+  t.after(() => {
+    if (previousProgress === undefined) delete process.env.XHS_OPS_PROGRESS;
+    else process.env.XHS_OPS_PROGRESS = previousProgress;
+  });
+  t.mock.method(process.stderr, 'write', line => {
+    if (String(line).startsWith(PROGRESS_PREFIX)) events.push(JSON.parse(String(line).slice(PROGRESS_PREFIX.length)));
+    return true;
+  });
   const [result] = await f.runCoverOnly();
   assert.equal(result.status, 'updated');
   assert.equal(result.replacement, null);
@@ -433,6 +445,24 @@ test('a custom cover can be repaired without uploading the saved video again', a
   assert.equal(f.observed.coverUploads, 1);
   assert.equal(f.observed.coverConfirmations, 1);
   assert.equal(f.observed.opens.length, 2);
+  for (const phase of ['prepared', 'submit_attempted']) {
+    const event = events.find(value => value.phase === phase);
+    assert.equal(event.detail.stage, 'cover-and-copy');
+    assert.equal(event.detail.cover.preCoverSource, 'https://example.invalid/original-cover.jpg');
+    assert.equal(event.detail.cover.source, result.cover.source);
+    assert.equal(event.detail.cover.confirmationClicked, true);
+  }
+});
+
+test('cover-only edit rejects mixed image replacement before opening the editor', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-cover-mixed-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const image = path.join(dir, 'image.png');
+  await fs.writeFile(image, 'synthetic image');
+  const page = { goto: async () => { throw new Error('Unexpected browser navigation'); } };
+  await assert.rejects(getRegistry().get('xiaohongshu/edit-note').func(page,
+    { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Caption', cover: image, images: image }),
+  /custom video cover cannot replace images/);
 });
 
 for (const savedVideo of ['unchanged', 'empty']) {

@@ -119,3 +119,50 @@ test('standard MCP handshake, tools, resources and shared CLI account state', as
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('MCP package inspection and ingestion accept a cover-only existing video edit', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-mcp-cover-only-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const fake = path.join(dir, 'fake-opencli');
+  await fs.copyFile(path.join(root, 'test/fixtures/fake-opencli.mjs'), fake);
+  await fs.chmod(fake, 0o700);
+  const env = { ...process.env,
+    XHS_OPS_HOME: path.join(dir, 'private data'), XHS_OPS_OWNER_HOME: path.join(dir, 'owners'),
+    XHS_OPS_OPENCLI_BIN: fake, FAKE_OPENCLI_STATE: path.join(dir, 'synthetic-platform.json'),
+  };
+  await fs.copyFile(path.join(root, 'examples/image-post/sample.png'), path.join(dir, 'cover.png'));
+  const manifest = path.join(dir, 'cover-only.json');
+  const sourceNoteId = '00000000000000000000000a';
+  await fs.writeFile(manifest, JSON.stringify({
+    schemaVersion: 1, platform: 'xiaohongshu', account: 'demo', kind: 'edit', sourceNoteId,
+    title: 'Revised video note', body: 'Keep the saved video and replace its cover.', topics: ['城市漫步'],
+    cover: 'cover.png',
+  }));
+  const client = new Client({ name: 'rednote-cover-only-test', version: '1.0.0' });
+  try {
+    await client.connect(new StdioClientTransport({
+      command: process.execPath, args: [path.join(root, 'src/mcp.mjs')], env, stderr: 'pipe',
+    }));
+    const bound = await client.callTool({ name: 'account_bind', arguments: {
+      account: 'demo', userId: 'demo-user-001', profile: 'demo-profile', name: 'Synthetic author',
+    } });
+    assert.notEqual(bound.isError, true, JSON.stringify(bound));
+    const inspected = await client.callTool({ name: 'package_inspect', arguments: { path: manifest } });
+    assert.notEqual(inspected.isError, true, JSON.stringify(inspected));
+    assert.equal(inspected.structuredContent.package.kind, 'edit');
+    assert.equal(inspected.structuredContent.package.video, null);
+    assert.equal(inspected.structuredContent.package.cover.name, 'cover.png');
+    assert.equal(inspected.structuredContent.package.mediaType, 'video');
+    const imported = await client.callTool({ name: 'package_ingest', arguments: { path: manifest } });
+    assert.notEqual(imported.isError, true, JSON.stringify(imported));
+    assert.ok(imported.structuredContent.taskId, JSON.stringify(imported));
+    const task = await client.callTool({ name: 'task_get', arguments: { taskId: imported.structuredContent.taskId } });
+    assert.notEqual(task.isError, true, JSON.stringify(task));
+    assert.equal(task.structuredContent.task.video, null);
+    assert.equal(task.structuredContent.task.cover.name, 'cover.png');
+    assert.equal(task.structuredContent.task.source_note_id, sourceNoteId);
+    assert.equal(task.structuredContent.task.state, 'draft');
+  } finally {
+    await client.close();
+  }
+});

@@ -47,6 +47,7 @@ cli({
     const prepareOnly = kwargs['prepare-only'] === true || kwargs['prepare-only'] === 'true';
     if (cover.length > 1) throw new CommandExecutionError('Choose at most one custom cover');
     if (video && images.length) throw new CommandExecutionError('Choose replacement video or images, not both');
+    if (cover.length && images.length) throw new CommandExecutionError('A custom video cover cannot replace images');
     const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) {
       throw new CommandExecutionError('upload-timeout must be between 10 and 3600 seconds');
@@ -127,6 +128,7 @@ cli({
     emitProgress('prepared', { kind: 'edit', noteId, mediaType: prepared.mediaType,
       stage: firstStage,
       ...(video && cover.length ? { pendingStages: ['cover-and-copy'] } : {}),
+      ...(coverSelection ? { cover: coverSelection } : {}),
       nativeTopicCount: prepared.topics.length, declarations: declarations.observed,
       composer: { url: prepared.url, observedAt: new Date().toISOString(), persistence: 'not-confirmed' } });
     if (prepareOnly) return [{ status: 'prepared', submitted: false, noteId, title: prepared.title,
@@ -136,7 +138,8 @@ cli({
         ...(video && cover.length ? { coverStage: 'pending-after-video-save', pendingStages: ['cover-and-copy'] } : {}),
         instruction: 'Inspect this same composer and account before continuing; no submission was invoked.' } }];
     const stages = [];
-    emitProgress('submit_attempted', { kind: 'edit', noteId, stage: firstStage });
+    emitProgress('submit_attempted', { kind: 'edit', noteId, stage: firstStage,
+      ...(coverSelection ? { cover: coverSelection } : {}) });
     let submitMethod = await submitEdit(page);
     stages.push({ stage: firstStage, submitMethod });
     emitProgress('platform_accepted', { kind: 'edit', noteId, stage: stages[0].stage,
@@ -208,6 +211,8 @@ cli({
       sameTopics(after.topics, topics) &&
       (!images.length || after.imageCount === images.length) &&
       (!video || (after.videoPresent && Boolean(after.video?.src))) &&
+      (!cover.length || video || (videoSourceIdentity(before.video?.src)
+        && videoSourceIdentity(before.video.src) === videoSourceIdentity(after.video?.src))) &&
       (!cover.length || (coverSourceChanged && savedCoverSource));
     if (!verified) {
       throw new CommandExecutionError(

@@ -129,6 +129,9 @@ transformed image bytes.
 For recovery or maintenance, `cover` may be supplied without `video` on an
 existing video note. That path changes the approved copy, native topics and
 custom cover in one save while leaving the already-saved video untouched.
+CLI and MCP package ingestion accept this same edit package. The preflight requires
+an existing video note; `images` cannot be combined with a custom cover. Verification
+requires both the recorded selected cover and the original saved video resource.
 
 The attempt retains stage and cover-selection evidence for read-only recovery if
 the final adapter response is lost. If a stage stops, inspect `show`, `handoff` and

@@ -15,6 +15,9 @@ if (command === 'steward-account') output([{ logged_in: true, userId: process.en
   (process.env.FAKE_USER_ID_BY_PROFILE && process.env.OPENCLI_PROFILE === 'second-profile' ? 'demo-user-002' : 'demo-user-001'), username: 'Example creator', identitySource: 'fixture' }]);
 else if (command === 'inventory') output(state.notes.map(note => ({ id: note.noteId, title: note.title })));
 else if (command === 'steward-read-note') {
+  if (process.env.FAKE_REQUIRE_VIDEO_READ === '1' && option('--note-type') !== 'video') {
+    process.stderr.write('The synthetic video note requires the video editor\n'); process.exit(1);
+  }
   if (process.env.FAKE_READ_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_READ_DELAY)));
   output(state.notes.filter(note => note.noteId === args[2]));
 }
@@ -33,6 +36,32 @@ else if (['steward-publish','edit-note'].includes(command)) {
   if (process.env.FAKE_PUBLISH_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_PUBLISH_DELAY)));
   // Reload after the delay so concurrent writes become visible to the test.
   state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : state;
+  if (command === 'edit-note' && args.includes('--cover') && !args.includes('--video')) {
+    const id = args[2];
+    const previous = state.notes.find(note => note.noteId === id);
+    const preCoverSource = previous?.cover?.url;
+    progress('prepared', { kind: 'edit', noteId: id, stage: 'cover-and-copy', preCoverSource,
+      cover: { previousSource: preCoverSource, selectionPending: true } });
+    if (process.env.FAKE_MODE === 'cover-only-stage-only') {
+      process.stderr.write('Connection lost before custom cover selection\n'); process.exit(1);
+    }
+    const selected = `https://example.invalid/custom-cover-${state.writes + 1}.jpg`;
+    const cover = { preCoverSource, previousSource: preCoverSource, source: selected, confirmationClicked: true,
+      selectionVerified: true, identityVerifiedAfterSave: false };
+    if (process.env.FAKE_MODE !== 'cover-only-no-evidence') {
+      progress('submit_attempted', { kind: 'edit', noteId: id, stage: 'cover-and-copy', cover });
+    }
+    const row = { ...previous, title: option('--title'), body: option('--content'),
+      topics: option('--topics').split(',').filter(Boolean).map((name, i) => ({ id: `topic-${i + 1}`, name })),
+      cover: process.env.FAKE_MODE === 'cover-only-keep-cover' ? previous.cover : { url: selected } };
+    state.writes++;
+    state.notes = [...state.notes.filter(note => note.noteId !== id), row]; save();
+    if (['unknown-cover-only','cover-only-keep-cover','cover-only-no-evidence'].includes(process.env.FAKE_MODE)) {
+      process.stderr.write('Connection lost after submission\n'); process.exit(1);
+    }
+    output([{ status: 'submitted', noteId: id, cover: { ...cover, identityVerifiedAfterSave: true } }]);
+    process.exit(0);
+  }
   state.writes++;
   const id = command === 'edit-note' ? args[2] : state.writes.toString(16).padStart(24, '0');
   const video = args.includes('--video');
