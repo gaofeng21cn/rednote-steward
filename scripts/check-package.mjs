@@ -5,9 +5,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pack = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+const packOutput = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
   cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-}))[0];
+}));
+// npm versions emit either an array with one pack record or an object keyed
+// by package name. Accept both so the release check is portable across Node/npm
+// versions used by contributors and CI.
+const pack = Array.isArray(packOutput)
+  ? packOutput[0]
+  : packOutput[Object.keys(packOutput)[0]];
 const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|package\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
 const privateFile = /(?:^|\/)(?:\.state|receipts|workers|cookies|accounts\.json|browser-profiles\.json|\.env(?:\..*)?)(?:\/|$)|\.(?:sqlite(?:-[\w]+)?|db|log)$/i;
 const localPath = /\/(?:Users|home)\/[a-zA-Z][\w.-]+\//;
