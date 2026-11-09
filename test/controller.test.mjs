@@ -104,6 +104,23 @@ test('absence cannot override an observed candidate note',async t=>{
   assert.match(result.stderr,/candidate note exists/); assert.equal((await platform(f.env)).writes,1);
 });
 
+test('an edit with an unchanged target can be cleared for retry',async t=>{
+  const f=await fixture(t);
+  const dir=await f.content('Edit example',{kind:'edit',sourceNoteId:'000000000000000000000001',images:[]});
+  const id=(await command(['ingest',dir],f.env)).json.taskId;
+  await command(['approve',id],f.env);
+  const db=openDatabase(path.join(f.env.XHS_OPS_HOME,'xhs-ops.sqlite'));
+  db.prepare("UPDATE tasks SET state='needs_review',write_started_at=?,last_error=? WHERE id=?")
+    .run(new Date().toISOString(),'Upload did not change the note',id);
+  db.close();
+  const result=await command([
+    'reconcile',id,'--absent','--reason',
+    'The same note media and copy remained unchanged; no write was applied.',
+  ],f.env);
+  assert.equal(result.json.state,'failed',result.stderr);
+  assert.equal(result.json.retryRequiresAuthorization,true);
+});
+
 test('future tasks remain queued even when explicitly selected',async t=>{
   const f=await fixture(t); const {id}=await f.queued();
   await command(['approve',id,'--at','2099-01-01T00:00:00Z'],f.env);

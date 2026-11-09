@@ -11,7 +11,18 @@ function ensureColumns(db, table, definitions) {
 export function openDatabase(dbPath) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(dbPath, { timeout: 5000 });
-  db.exec('PRAGMA busy_timeout = 30000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA busy_timeout = 30000; PRAGMA foreign_keys = ON;');
+  // journal_mode=WAL can need an exclusive lock while several fresh CLI
+  // processes initialize the same file. It is persistent once set, so retry
+  // this bootstrap operation before taking the schema transaction.
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    try { db.exec('PRAGMA journal_mode = WAL;'); break; }
+    catch (error) {
+      if (!/locked|busy/i.test(String(error?.message || error)) || Date.now() >= deadline) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
   db.exec('BEGIN IMMEDIATE');
   try {
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (

@@ -256,9 +256,8 @@ export class Controller {
     if (noteId) checkNoteId(noteId);
     const publication = [...events].reverse().find(event => event.event === 'adapter_finished')?.payload?.publication ?? null;
     if (task.kind === 'edit') {
-      if (absent) throw new Error('An existing edit target cannot be declared absent; inspect and resolve the note fields');
       if (noteId && noteId !== task.source_note_id) throw new Error('Reconcile an edit using its original note ID');
-      noteId = task.source_note_id;
+      if (!absent) noteId = task.source_note_id;
     } else if (!noteId) {
       noteId = task.platform_note_id || await this.findPublished(task, publication, 1);
     } else if ((task.baseline_ids ?? []).includes(noteId)) {
