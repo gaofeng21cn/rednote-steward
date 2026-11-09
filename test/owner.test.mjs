@@ -3,9 +3,11 @@ import test from 'node:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { acquireAccountWrite, inspectAccountOwner, registerAccountOwner, resolveAccountWrite, transferAccountOwner } from '../src/lib/owner.mjs';
+const exec = promisify(execFile);
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-owner-'));
@@ -81,4 +83,17 @@ test('inspection on an untouched owner root creates no registry', async t => {
   const result = inspectAccountOwner({ userId: 'demo-user-001', profile: 'chrome-main' }, { home: f.home });
   assert.equal(result.state, 'unregistered');
   await assert.rejects(fs.stat(process.env.XHS_OPS_OWNER_HOME), { code: 'ENOENT' });
+});
+
+test('two processes registering different homes preserve exactly one account owner', async t => {
+  const f = await fixture(t);
+  const module = new URL('../src/lib/owner.mjs', import.meta.url).href;
+  const account = { userId: 'shared-user', profile: 'shared-profile' };
+  const outputs = await Promise.all([f.home, f.other].map(async home => {
+    const script = `import {registerAccountOwner} from ${JSON.stringify(module)}; try {registerAccountOwner(${JSON.stringify(account)},{home:${JSON.stringify(home)}}); console.log(JSON.stringify({ok:true}));} catch(error) {console.log(JSON.stringify({ok:false,code:error.code}));}`;
+    const { stdout } = await exec(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env } });
+    return JSON.parse(stdout);
+  }));
+  assert.equal(outputs.filter(value => value.ok).length, 1);
+  assert.equal(outputs.filter(value => value.code === 'state_owner_conflict').length, 1);
 });
