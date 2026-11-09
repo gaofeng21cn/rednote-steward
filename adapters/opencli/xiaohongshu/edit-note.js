@@ -1,12 +1,12 @@
 // RedNote Steward. Derived from the account-ops local OpenCLI adapter.
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { CommandExecutionError } from '@jackwener/opencli/errors';
-import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, normalizeForComparison, sameTopics, submitEdit, editUrl } from './editor-helpers.mjs';
+import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, replaceVideo, normalizeForComparison, sameTopics, submitEdit, editUrl } from './editor-helpers.mjs';
 
 cli({
   site: 'xiaohongshu',
   name: 'edit-note',
-  description: '批量编辑已发布小红书笔记（文案、真实话题、图片），并回读验收',
+  description: '批量编辑已发布小红书笔记（文案、真实话题、图片或视频），并回读验收',
   access: 'write',
   example:
     'opencli xiaohongshu edit-note 0123456789abcdef01234567 --title "标题" --content "正文" --topics "旅行,城市漫步"',
@@ -20,6 +20,8 @@ cli({
     { name: 'content', default: '', help: 'Replacement body without hashtags (required unless --dry-run)' },
     { name: 'topics', default: '', help: 'Comma-separated exact Xiaohongshu topics; empty removes topics when replacing the body' },
     { name: 'images', default: '', help: 'Comma-separated complete image list in display order; empty keeps existing images' },
+    { name: 'video', default: '', help: 'Replacement video file; empty keeps existing video' },
+    { name: 'upload-timeout', type: 'int', default: 600, help: 'Video upload/processing timeout in seconds' },
     { name: 'dry-run', type: 'bool', default: false, help: 'Open and read the note without changing or submitting it' },
   ],
   columns: ['status', 'noteId', 'title', 'body', 'topicNodes', 'topics', 'images', 'readback'],
@@ -29,10 +31,19 @@ cli({
     const content = kwargs['dry-run'] ? String(kwargs.content ?? '').trim() : validateBody(kwargs.content);
     const topics = validateTopics(kwargs.topics);
     const images = validateImages(kwargs.images);
+    const video = validateVideo(kwargs.video);
+    if (video && images.length) throw new CommandExecutionError('Choose replacement video or images, not both');
+    const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) {
+      throw new CommandExecutionError('upload-timeout must be between 10 and 3600 seconds');
+    }
 
-    await openEditor(page, noteId);
+    await openEditor(page, noteId, video ? 'video' : 'normal');
     const before = await readEditor(page);
     if (!before) throw new CommandExecutionError('The note editor loaded but its fields could not be read');
+    if (video && before.mediaType !== 'video') {
+      throw new CommandExecutionError('Video replacement requires an existing video note');
+    }
 
     if (kwargs['dry-run']) {
       return [{
@@ -47,6 +58,7 @@ cli({
       }];
     }
 
+    if (video) await replaceVideo(page, video, timeoutSeconds * 1000);
     await fillTitle(page, title);
     await fillBody(page, content);
     await replaceTopics(page, topics);
@@ -70,9 +82,12 @@ cli({
         `Pre-submit image mismatch: expected ${images.length}, got ${prepared.imageCount}`,
       );
     }
+    if (video && (!prepared.videoPresent || !(prepared.video?.duration > 0))) {
+      throw new CommandExecutionError('Pre-submit video is absent or not ready');
+    }
 
     const submitMethod = await submitEdit(page);
-    await openEditor(page, noteId);
+    await openEditor(page, noteId, video ? 'video' : 'normal');
     const after = await readEditor(page);
     if (!after) throw new CommandExecutionError('The note editor could not be reopened for readback');
 
@@ -80,10 +95,11 @@ cli({
       after.title === title &&
       normalizeForComparison(after.body) === normalizeForComparison(content) &&
       sameTopics(after.topics, topics) &&
-      (!images.length || after.imageCount === images.length);
+      (!images.length || after.imageCount === images.length) &&
+      (!video || (after.videoPresent && after.video?.duration > 0));
     if (!verified) {
       throw new CommandExecutionError(
-        `Saved note ${noteId}, but readback did not match the requested title/body/topics/images`,
+        `Saved note ${noteId}, but readback did not match the requested title/body/topics/media`,
         `Open ${editUrl(noteId)} and inspect the saved fields.`,
       );
     }

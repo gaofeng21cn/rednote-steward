@@ -11,7 +11,7 @@ function ensureColumns(db, table, definitions) {
 export function openDatabase(dbPath) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(dbPath, { timeout: 5000 });
-  db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA busy_timeout = 30000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec('BEGIN IMMEDIATE');
   try {
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (

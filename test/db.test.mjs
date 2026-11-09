@@ -39,3 +39,15 @@ test('migrates an existing metrics table without losing rows', () => {
   );
   migrated.close();
 });
+
+test('concurrent initialization shares one migrated database', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-ops-db-concurrent-'));
+  const dbPath = path.join(dir, 'state.sqlite');
+  const opened = await Promise.all(
+    Array.from({ length: 6 }, async () => openDatabase(dbPath)),
+  );
+  for (const db of opened) {
+    assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout, 30000);
+    db.close();
+  }
+});

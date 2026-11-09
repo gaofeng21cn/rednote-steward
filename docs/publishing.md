@@ -86,7 +86,26 @@ Use `kind: "edit"` and the exact existing platform note ID:
 }
 ```
 
-The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order. Video-file replacement is outside the current edit path; inspect what the platform supports before choosing an update or a new post.
+The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order.
+
+To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, waits for platform processing, applies the approved title/body/native topics, and reads the same note ID back after saving. This keeps the original note and its engagement history.
+
+```json
+{
+  "schemaVersion": 1,
+  "platform": "xiaohongshu",
+  "account": "education",
+  "kind": "edit",
+  "sourceNoteId": "000000000000000000000001",
+  "title": "Revised title",
+  "body": "The approved description.",
+  "topics": ["Health education"],
+  "video": "final.mp4",
+  "cover": "cover.png"
+}
+```
+
+If the platform does not expose a video file input for that note, Steward stops before submission. If the upload result is ambiguous, it retains the attempt and blocks another write until the same note is reconciled. A successful update does not imply that platform review or public visibility has completed.
 
 For a new edition that relates to an earlier post, include `replacesNoteId` in a publish package. This records the relationship locally. It does not delete the earlier post.
 

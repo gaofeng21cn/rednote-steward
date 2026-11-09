@@ -9,7 +9,7 @@ export async function readNote(page, noteId) {
   return {
     noteId,
     ...row,
-    mediaType: row.videoPresent ? 'video' : row.imageCount ? 'image' : 'unknown',
+    mediaType: row.mediaType,
     verification: {
       title: true, body: true, nativeTopics: true, imageCount: true,
       imageOrder: 'urls-only', videoBytes: false, coverIdentity: false,

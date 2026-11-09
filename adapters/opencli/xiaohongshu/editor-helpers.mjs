@@ -30,6 +30,7 @@ const IMAGE_INPUT_SELECTOR = [
   'input[type="file"][accept*=".webp"]',
 ].join(',');
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v']);
 const IMAGE_MIME_TYPES = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -103,8 +104,20 @@ function validateImages(value) {
   return images;
 }
 
-function editUrl(noteId) {
-  return `${CREATOR_ORIGIN}${EDIT_PATH}?id=${encodeURIComponent(noteId)}&noteType=normal`;
+function validateVideo(value) {
+  if (!value) return null;
+  const video = path.resolve(String(value));
+  if (!fs.existsSync(video) || !fs.statSync(video).isFile() || !fs.statSync(video).size) {
+    throw new ArgumentError(`video not found or empty: ${video}`);
+  }
+  if (!VIDEO_EXTENSIONS.has(path.extname(video).toLowerCase())) {
+    throw new ArgumentError(`unsupported video format: ${video}`);
+  }
+  return video;
+}
+
+function editUrl(noteId, noteType = 'normal') {
+  return `${CREATOR_ORIGIN}${EDIT_PATH}?id=${encodeURIComponent(noteId)}&noteType=${encodeURIComponent(noteType)}`;
 }
 
 async function waitFor(page, predicate, timeoutMs, intervalMs, label) {
@@ -132,8 +145,8 @@ async function waitForEditor(page) {
   );
 }
 
-async function openEditor(page, noteId) {
-  await page.goto(editUrl(noteId));
+async function openEditor(page, noteId, noteType = 'normal') {
+  await page.goto(editUrl(noteId, noteType));
   await waitForEditor(page);
   const currentUrl = String(await page.evaluate('location.href'));
   if (!currentUrl.includes('creator.xiaohongshu.com') || /login|passport/i.test(currentUrl)) {
@@ -189,6 +202,11 @@ async function readEditor(page) {
           const element = document.querySelector('video');
           return element?.currentSrc || element?.src || element?.querySelector('source')?.src || '';
         })()),
+        mediaType: (() => {
+          const element = document.querySelector('video');
+          if (element?.currentSrc || element?.src || element?.querySelector('source')?.src) return 'video';
+          return document.querySelector('.img-container') ? 'image' : 'unknown';
+        })(),
         video: (() => {
           const element = document.querySelector('video');
           if (!element) return null;
@@ -409,6 +427,44 @@ async function replaceImages(page, images) {
   }
 }
 
+async function replaceVideo(page, video, timeoutMs = 600000) {
+  if (!video) return null;
+  const before = await readEditor(page);
+  if (!before?.videoPresent) {
+    throw new CommandExecutionError('The edit target is not a video note');
+  }
+  const videoInput = 'input[type="file"][accept*=".mp4"]';
+  const hasInput = Boolean(await page.evaluate(
+    `(selector => Boolean(document.querySelector(selector)))(${JSON.stringify(videoInput)})`,
+  ));
+  if (!hasInput) {
+    throw new CommandExecutionError('The video replacement input is unavailable; the note remains unsubmitted');
+  }
+  if (typeof page.setFileInput !== 'function') {
+    throw new CommandExecutionError('Update OpenCLI Browser Bridge: local video upload is unavailable');
+  }
+  // Exactly one upload attempt. If the bridge loses the result after the
+  // file reaches the platform, the controller retains the task as unknown.
+  await page.setFileInput([video], videoInput);
+  await waitFor(
+    page,
+    async () => {
+      const state = await readEditor(page);
+      const text = String(await page.evaluate('document.body.innerText'));
+      return Boolean(
+        state?.videoPresent &&
+        state.video?.duration > 0 &&
+        !/上传中|视频处理中/.test(text) &&
+        state.video?.src !== before.video?.src,
+      );
+    },
+    timeoutMs,
+    1000,
+    'Xiaohongshu video upload and processing',
+  );
+  return readEditor(page);
+}
+
 async function submitEdit(page) {
   const invoked = await page.evaluate(
     `(methodNames => {
@@ -457,4 +513,4 @@ function sameTopics(actual, expected) {
 }
 
 
-export { normalizeText, normalizeForComparison, validateNoteId, validateTitle, validateBody, validateTopics, validateImages, editUrl, waitFor, waitForEditor, openEditor, readEditor, fillTitle, fillBody, addTopic, replaceTopics, replaceImages, submitEdit, sameTopics, IMAGE_INPUT_SELECTOR };
+export { normalizeText, normalizeForComparison, validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, editUrl, waitFor, waitForEditor, openEditor, readEditor, fillTitle, fillBody, addTopic, replaceTopics, replaceImages, replaceVideo, submitEdit, sameTopics, IMAGE_INPUT_SELECTOR };

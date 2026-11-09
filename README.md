@@ -37,7 +37,7 @@ The bundled Skill helps an assistant follow these workflows. Your account prefer
 | --- | --- |
 | Prepare a release | Image or video packages with copy, native topic names, optional cover, and file fingerprints |
 | Manage accounts | Stable account ID and browser profile bindings, with identity checks before writes |
-| Publish and edit | A local queue, explicit authorization records, due times, and one active write per account |
+| Publish and edit | New image/video posts and in-place video replacement in existing notes, with a local queue, authorization records, due times, and one active write per account |
 | Continue after interruption | Saved attempts, platform note IDs, readback, and reconciliation before another attempt |
 | Maintain existing posts | Inventory, supported text/topic/image edits, metrics, and review candidates |
 | Use another client | CLI and standard MCP Server over the same controller and task database |

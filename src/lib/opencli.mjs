@@ -18,6 +18,8 @@ export function runOpencli(args, { timeoutMs = 300_000, profile, onSpawn } = {})
     const argv = override ? args : [runner, ...args];
     const env = { ...process.env };
     if (profile) env.OPENCLI_PROFILE = profile;
+    const browserSeconds = Math.max(60, Math.ceil(timeoutMs / 1000));
+    env.OPENCLI_BROWSER_COMMAND_TIMEOUT = String(browserSeconds);
     const child = spawn(executable, argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '', timedOut = false, settled = false, escalation, spawnSetupError = false;
     if (child.pid && onSpawn) {
@@ -64,6 +66,7 @@ export function editArgs(task) {
   const args = ['xiaohongshu', 'edit-note', task.source_note_id, '--title', task.title,
     '--content', task.body, '--topics', task.topics.join(',')];
   if (task.images.length) args.push('--images', task.images.map(image => image.path).join(','));
+  if (task.video) args.push('--video', task.video.path);
   args.push(...browserArgs);
   return args;
 }

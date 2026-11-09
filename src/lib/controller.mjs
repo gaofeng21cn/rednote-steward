@@ -206,6 +206,7 @@ export class Controller {
         beforeNote = rowOf(resultData(await readNote(task.source_note_id, account.profile), 'Pre-edit note'));
         if (beforeNote?.noteId !== task.source_note_id) throw new Error('Pre-edit note ID mismatch');
         if (task.images.length && beforeNote.mediaType === 'video') throw new Error('Video notes cannot replace media with images');
+        if (task.video && beforeNote.mediaType !== 'video') throw new Error('Video replacement requires an existing video note');
       }
       task = { ...task, baseline_ids: beforeIds, baseline_note: beforeNote };
       this.withDatabase(db => transaction(db, () => {
