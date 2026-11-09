@@ -88,13 +88,27 @@ export function compareReadback(task, row, publication = null) {
     && Object.entries(expectedDeclarations).every(([key,value]) => row.declarations.values?.[key] === value);
   const baseline = task.baseline_note;
   if (task.video) {
-    checks.media = row?.mediaType === 'video' && row?.videoPresent === true && row.video?.duration > 0;
+    checks.media = row?.mediaType === 'video' && row?.videoPresent === true && Boolean(row.video?.src);
     if (task.kind === 'edit') {
       checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
       const preparedDuration = publication?.replacement?.prepared?.duration;
-      if (preparedDuration > 0) checks.videoDuration = Math.abs(row?.video?.duration - preparedDuration) <= 0.5;
+      if (preparedDuration > 0 && row?.video?.duration > 0) {
+        checks.videoDuration = Math.abs(row.video.duration - preparedDuration) <= 0.5;
+      }
     }
-    if (task.cover) checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+    if (task.cover) {
+      if (task.kind === 'edit') {
+        const coverSourceChanged = videoSourceChanged(baseline?.cover?.url, row?.cover?.url);
+        checks.customCover = Boolean(
+          publication?.cover?.confirmationClicked
+          && publication?.cover?.identityVerifiedAfterSave === true
+          && coverSourceChanged
+          && row?.cover?.url
+        );
+      } else {
+        checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+      }
+    }
   } else if (task.images.length) {
     checks.media = row?.mediaType === 'image' && row?.verification?.imageCount === true && row.imageCount === task.images.length;
   } else if (baseline?.mediaType === 'video') {

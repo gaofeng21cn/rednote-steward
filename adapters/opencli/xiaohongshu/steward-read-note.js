@@ -11,8 +11,8 @@ export async function readNote(page, noteId, noteType = 'normal') {
   if (noteType === 'video' || row.videoPresent) {
     await waitFor(page, async () => {
       row = await readEditor(page);
-      return row?.videoPresent && row.video?.duration > 0;
-    }, 15_000, 500, 'saved video metadata');
+      return row?.videoPresent && Boolean(row.video?.src);
+    }, 15_000, 500, 'saved video source');
   }
   return {
     noteId,

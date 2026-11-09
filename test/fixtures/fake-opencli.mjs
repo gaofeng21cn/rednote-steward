@@ -40,10 +40,17 @@ else if (['steward-publish','edit-note'].includes(command)) {
     mediaType: video ? 'video' : 'image', videoPresent: video,
     video: video ? (process.env.FAKE_MODE === 'keep-video' ? previous?.video
       : { src: `https://example.invalid/video-${state.writes}.mp4`, duration: 65.13 }) : null,
-    cover: video ? { url: 'https://example.invalid/cover.jpg' } : null,
+    cover: video ? (args.includes('--cover')
+      ? { url: `https://example.invalid/cover-${state.writes}.jpg` }
+      : previous?.cover ?? { url: 'https://example.invalid/cover-original.jpg' }) : null,
     verification: { title: true, body: true, nativeTopics: true, imageCount: true } };
   state.notes = [...state.notes.filter(note => note.noteId !== id), row]; save();
   if (process.env.FAKE_MODE === 'unknown') { process.stderr.write('Connection lost after submission\n'); process.exitCode = 1; }
-  else output([{ status: 'submitted', noteId: id, cover: args.includes('--cover') ? { confirmationClicked: true } : null }]);
+  else output([{ status: 'submitted', noteId: id, cover: args.includes('--cover') ? {
+    confirmationClicked: true,
+    identityVerifiedAfterSave: true,
+    previousSource: previous?.cover?.url,
+    source: row.cover?.url,
+  } : null }]);
 } else if (args[0] === 'doctor') output({ ok: true });
 else { process.stderr.write(`Unexpected fixture command: ${command}\n`); process.exitCode = 1; }

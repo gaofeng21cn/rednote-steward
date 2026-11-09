@@ -4,7 +4,7 @@ import { CommandExecutionError } from '@jackwener/opencli/errors';
 import { applyCover } from './cover-editor.mjs';
 import { applyDeclarations, validateDeclarations } from './declarations.mjs';
 import { emitProgress } from '../../../src/lib/progress.mjs';
-import { videoSourceChanged } from '../../../src/lib/media.mjs';
+import { videoSourceChanged, videoSourceIdentity } from '../../../src/lib/media.mjs';
 import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, replaceVideo, normalizeForComparison, sameTopics, submitEdit, editUrl, waitFor } from './editor-helpers.mjs';
 
 cli({
@@ -74,7 +74,7 @@ cli({
     }
 
     const replacement = video ? await replaceVideo(page, video, timeoutSeconds * 1000) : null;
-    const coverSelection = cover.length ? await applyCover(page, cover[0]) : null;
+    let coverSelection = null;
     await fillTitle(page, title);
     await fillBody(page, content);
     await replaceTopics(page, topics);
@@ -99,7 +99,7 @@ cli({
         `Pre-submit image mismatch: expected ${images.length}, got ${prepared.imageCount}`,
       );
     }
-    if (video && (!prepared.videoPresent || !(prepared.video?.duration > 0))) {
+    if (video && (!prepared.videoPresent || !prepared.video?.src || prepared.video.src === before.video?.src)) {
       throw new CommandExecutionError('Pre-submit video is absent or not ready');
     }
     emitProgress('prepared', { kind: 'edit', noteId, mediaType: prepared.mediaType,
@@ -110,24 +110,67 @@ cli({
       replacement, cover: coverSelection, declarations, snapshot: prepared,
       recovery: { composerObserved: true, persistedDraftVerified: false,
         instruction: 'Inspect this same composer and account before continuing; no submission was invoked.' } }];
-    emitProgress('submit_attempted', { kind: 'edit', noteId });
-    const submitMethod = await submitEdit(page);
-    emitProgress('platform_accepted', { kind: 'edit', noteId, confirmation: 'creator-edit-success-page' });
+    const stages = [];
+    emitProgress('submit_attempted', { kind: 'edit', noteId, stage: video && cover.length ? 'video-and-copy' : 'single' });
+    let submitMethod = await submitEdit(page);
+    stages.push({ stage: video && cover.length ? 'video-and-copy' : 'single', submitMethod });
+    emitProgress('platform_accepted', { kind: 'edit', noteId, stage: stages[0].stage,
+      confirmation: 'creator-edit-success-page' });
+
+    if (video && cover.length) {
+      // The creator UI keeps the custom-cover confirmation disabled until a
+      // replacement video has been committed. Reopen the same note after the
+      // first save, then apply and commit the cover as a second recoverable
+      // stage before the final readback.
+      await openEditor(page, noteId, 'video');
+      let videoSaved = await readEditor(page);
+      if (!videoSaved || videoSourceIdentity(videoSaved.video?.src) === videoSourceIdentity(before.video?.src)) {
+        throw new CommandExecutionError(
+          `The first video edit submission returned for note ${noteId}, but the saved video source did not change`,
+          `Inspect ${editUrl(noteId)} and reconcile this same note before another submission.`,
+        );
+      }
+      coverSelection = await applyCover(page, cover[0]);
+      await fillTitle(page, title);
+      await fillBody(page, content);
+      await replaceTopics(page, topics);
+      const coverPrepared = await readEditor(page);
+      if (!coverPrepared || coverPrepared.title !== title
+        || normalizeForComparison(coverPrepared.body) !== normalizeForComparison(content)
+        || !sameTopics(coverPrepared.topics, topics)) {
+        throw new CommandExecutionError(
+          `The video stage was saved for note ${noteId}, but the cover-stage fields did not match`,
+          `Inspect ${editUrl(noteId)} and reconcile this same note before another submission.`,
+        );
+      }
+      emitProgress('submit_attempted', { kind: 'edit', noteId, stage: 'cover-and-copy' });
+      const coverSubmitMethod = await submitEdit(page);
+      stages.push({ stage: 'cover-and-copy', submitMethod: coverSubmitMethod });
+      emitProgress('platform_accepted', { kind: 'edit', noteId, stage: 'cover-and-copy',
+        confirmation: 'creator-edit-success-page' });
+    } else if (cover.length) {
+      coverSelection = await applyCover(page, cover[0]);
+    }
+
     emitProgress('readback', { noteId });
     await openEditor(page, noteId, video ? 'video' : 'normal');
     let after = await readEditor(page);
     if (!after) throw new CommandExecutionError('The note editor could not be reopened for readback');
     if (video) await waitFor(page, async () => {
       after = await readEditor(page);
-      return after?.videoPresent && after.video?.duration > 0;
+      return after?.videoPresent && Boolean(after.video?.src);
     }, 15_000, 500, 'saved video metadata');
 
+    const coverSourceChanged = coverSelection?.source
+      ? videoSourceIdentity(coverSelection.source) !== videoSourceIdentity(coverSelection.previousSource)
+      : true;
     const verified =
       after.title === title &&
       normalizeForComparison(after.body) === normalizeForComparison(content) &&
       sameTopics(after.topics, topics) &&
       (!images.length || after.imageCount === images.length) &&
-      (!video || (after.videoPresent && after.video?.duration > 0));
+      (!video || (after.videoPresent && Boolean(after.video?.src))) &&
+      (!cover.length || coverSourceChanged);
     if (!verified) {
       throw new CommandExecutionError(
         `Saved note ${noteId}, but readback did not match the requested title/body/topics/media`,
@@ -148,6 +191,7 @@ cli({
       declarations,
       replacement: replacement ? { ...replacement, after: after.video,
         savedSourceChanged: videoSourceChanged(before.video?.src, after.video?.src), bytesCompared: false } : null,
+      stages,
       readback: video && !videoSourceChanged(before.video?.src, after.video?.src)
         ? 'saved fields match; replacement video version unconfirmed' : `verified observable fields via ${submitMethod}`,
     }];

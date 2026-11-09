@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics, replaceVideo } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo, readEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
 import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
@@ -53,33 +53,44 @@ test('unknown upload failure never retries attachment', async () => {
   assert.equal(calls, 1);
 });
 
-test('custom cover waits for visible uploads and confirms the selected filename', async () => {
+test('custom cover opens from a hovered preview and verifies the saved cover source', async () => {
   let uploads = 0, closed = false;
-  const image = { src: 'https://example.invalid/old.jpg', complete: true, naturalWidth: 100 };
-  const confirm = { disabled: false, innerText: '保存', click() { closed = true; dialog.offsetParent = null; } };
-  const input = { accept: 'image/png', files: [], setAttribute() {}, closest: () => dialog };
-  const dialog = { offsetParent: {}, querySelectorAll(selector) {
-    if (selector === 'input[type="file"]') return [input];
-    if (selector === 'img') return [image];
-    if (selector.includes('loading')) return [{ offsetParent: null }];
-    if (selector.startsWith('button')) return [confirm];
-    return [];
-  } };
-  const document = {
-    querySelector: () => input,
-    querySelectorAll(selector) {
-      if (selector.startsWith('button')) return [{ offsetParent: {}, innerText: '编辑封面', click() {} }];
-      if (selector.startsWith('[role="dialog"] button')) return [{ offsetParent: {}, innerText: '上传图片', click() {} }];
-      if (selector.startsWith('[role="dialog"],')) return [dialog];
-      return [];
+  let hovered = false;
+  const page = {
+    wait: async () => {},
+    hover: async () => { hovered = true; },
+    evaluate: async source => {
+      if (source.includes('const preview = Array.from')) {
+        return '[data-steward-cover-preview="true"]';
+      }
+      if (source.includes('const target = Array.from')) return true;
+      if (source.includes('const dialogs = Array.from') && source.includes('input[type="file"]')) return true;
+      if (source.includes('const inputs = dialogs.flatMap')) {
+        return 'input[data-rednote-cover-input="true"]';
+      }
+      if (source.includes('const thumbnail = Array.from')) return uploads === 1;
+      if (source.includes('const button = Array.from') && source.includes('button.click()')) {
+        closed = true;
+        return { confirmationClicked: true };
+      }
+      if (source.includes('const dialog = document.querySelector')) return true;
+      if (source.includes('const preview = document.querySelector')) {
+        return closed
+          ? 'url("https://example.invalid/new-cover.jpg")'
+          : 'url("https://example.invalid/old-cover.jpg")';
+      }
+      throw new Error(`Unexpected cover script: ${source}`);
+    },
+    setFileInput: async () => {
+      uploads++;
     },
   };
-  const page = { wait: async () => {}, evaluate: source => evaluate(source, { document }),
-    setFileInput: async () => { uploads++; input.files = [{ name: 'cover.png' }]; image.src = 'blob:new-cover'; } };
   const result = await applyCover(page, '/synthetic/cover.png');
+  assert.equal(hovered, true);
   assert.equal(result.confirmationClicked, true);
   assert.equal(result.filename, 'cover.png');
-  assert.equal(result.identityVerifiedAfterSave, false);
+  assert.equal(result.identityVerifiedAfterSave, true);
+  assert.match(result.source, /new-cover/);
   assert.equal(uploads, 1);
   assert.equal(closed, true);
 });
@@ -188,7 +199,7 @@ test('inventory does not mistake a missing page or login for an empty account', 
   await assert.rejects(command.func(page, { limit: 30 }), /No creator note cards loaded/);
 });
 
-function videoEditor({ inputCount = 1, uploadError = null, image = false } = {}) {
+function videoEditor({ inputCount = 1, uploadError = null, image = false, durationAfterUpload = 65.13 } = {}) {
   const title = { offsetParent: {}, value: 'Example' };
   const body = { offsetParent: {}, querySelectorAll: () => [] };
   const video = { currentSrc: 'https://example.invalid/old.mp4', duration: 65.13 };
@@ -219,6 +230,7 @@ function videoEditor({ inputCount = 1, uploadError = null, image = false } = {})
       const stat = await fs.stat(files[0]);
       input.files = [{ name: path.basename(files[0]), size: stat.size }];
       video.currentSrc = 'blob:prepared-video';
+      video.duration = durationAfterUpload;
     },
   };
   return { page, uploads: () => uploads, context };
@@ -241,6 +253,49 @@ test('video replacement selects one native input once and retains preparation ev
   const lost = videoEditor({ uploadError: 'Connection lost after upload' });
   await assert.rejects(replaceVideo(lost.page, video), /Connection lost/);
   assert.equal(lost.uploads(), 1);
+});
+
+test('video replacement does not wait for a transient null browser duration', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-video-duration-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const video = path.join(dir, 'clip.mp4');
+  await fs.writeFile(video, 'synthetic video');
+  const editor = videoEditor({ durationAfterUpload: null });
+  const evidence = await replaceVideo(editor.page, video);
+  assert.equal(evidence.prepared.src, 'blob:prepared-video');
+  assert.equal(evidence.prepared.duration, null);
+});
+
+test('video readback uses the real cover preview instead of a decorative data image', async () => {
+  const title = { offsetParent: {}, value: 'Example' };
+  const topic = { getAttribute: () => JSON.stringify({ id: 'topic-1', name: '城市漫步' }), textContent: '#城市漫步' };
+  const paragraph = { cloneNode() {
+    return { innerText: 'Caption', textContent: 'Caption', querySelectorAll: () => [] };
+  } };
+  const body = { offsetParent: {}, querySelectorAll(selector) {
+    if (selector === ':scope > p') return [paragraph];
+    if (selector === 'a.tiptap-topic') return [topic];
+    return [];
+  } };
+  const video = { currentSrc: 'https://example.invalid/video.mp4', duration: NaN };
+  const cover = { style: { backgroundImage: 'url("https://example.invalid/cover.jpg")' } };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector.includes('placeholder')) return [title];
+      if (selector.includes('tiptap')) return [body];
+      if (selector === 'video') return [video];
+      if (selector === '.img-container') return [];
+      return [];
+    },
+    querySelector(selector) {
+      if (selector === 'video') return video;
+      if (selector.includes('cover-plugin-preview')) return cover;
+      return null;
+    },
+  };
+  const row = await readEditor({ evaluate: async source => evaluate(source, { document, location: { href: 'https://creator.xiaohongshu.com/publish/update' } }) });
+  assert.equal(row.cover.url, 'https://example.invalid/cover.jpg');
+  assert.equal(row.video.duration, null);
 });
 
 test('video edit rejects an image target before changing its fields or media', async t => {

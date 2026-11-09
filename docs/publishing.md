@@ -113,7 +113,14 @@ Use `kind: "edit"` and the exact existing platform note ID:
 
 The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order.
 
-To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, waits for processing, applies an optional custom cover and the approved title/body/native topics, and reads the same note ID back after saving. The update keeps the original note ID; platform review and distribution continue to follow the platform's rules.
+To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, applies the approved title/body/native topics, and reads the same note ID back after saving. The update keeps the original note ID; platform review and distribution continue to follow the platform's rules.
+
+When the package also includes `cover`, the creator UI may keep its cover
+confirmation disabled until the replacement video has itself been saved.
+Steward therefore commits the video and approved copy first, reopens the same
+note ID, applies and verifies the cover source change, and submits the cover
+stage. If either stage fails after a platform write, the task remains unresolved
+and must be inspected against that same note before another submission.
 
 ```json
 {
