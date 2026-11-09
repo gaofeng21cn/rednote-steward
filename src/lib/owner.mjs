@@ -89,7 +89,11 @@ function activeLease(row) {
 /** Register a single same-machine owner for either account-ID or profile conflicts. */
 export function registerAccountOwner(account, options = {}) {
   const owner = identity(account, options);
-  return mutate(db => register(db, owner));
+  return mutate(db => {
+    const result = register(db, owner);
+    options.commit?.(result);
+    return result;
+  });
 }
 
 /** This inspection creates neither the registry nor a task database. */
@@ -169,7 +173,7 @@ function unresolvedInHome(home, owner, alias) {
 }
 
 /** Transfer only a quiescent, readable previous owner. This does not clear unknown submissions. */
-export function transferAccountOwner(account, { home, fromHome, reason } = {}) {
+export function transferAccountOwner(account, { home, fromHome, reason, commit } = {}) {
   const owner = identity(account, { home });
   if (!fromHome || !String(reason || '').trim()) throw new Error('An exact --from-home and a transfer reason are required');
   const source = canonicalHome(fromHome);
@@ -183,6 +187,8 @@ export function transferAccountOwner(account, { home, fromHome, reason } = {}) {
       if (unresolved.length) throw failure('account_write_unresolved', 'The previous state has unresolved tasks; reconcile them there before ownership transfer', { tasks: unresolved });
     }
     db.prepare('DELETE FROM account_owners WHERE account_user_id=? OR browser_profile=?').run(owner.accountUserId, owner.browserProfile);
-    return { ...register(db, owner), previousHome: source, reason: String(reason).trim() };
+    const result = { ...register(db, owner), previousHome: source, reason: String(reason).trim() };
+    commit?.(result);
+    return result;
   });
 }

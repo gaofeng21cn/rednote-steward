@@ -1,18 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { acquireAccountWrite, inspectAccountOwner, registerAccountOwner, resolveAccountWrite, transferAccountOwner } from '../src/lib/owner.mjs';
+import { addAccount, accountFile, listAccounts, transferAccountBinding, validateAccountBinding } from '../src/lib/config.mjs';
 const exec = promisify(execFile);
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-owner-'));
   const previous = process.env.XHS_OPS_OWNER_HOME;
-  t.after(async () => { if (previous == null) delete process.env.XHS_OPS_OWNER_HOME; else process.env.XHS_OPS_OWNER_HOME = previous; await fs.rm(root, { recursive: true, force: true }); });
+  const previousHome = process.env.XHS_OPS_HOME;
+  t.after(async () => {
+    if (previous == null) delete process.env.XHS_OPS_OWNER_HOME; else process.env.XHS_OPS_OWNER_HOME = previous;
+    if (previousHome == null) delete process.env.XHS_OPS_HOME; else process.env.XHS_OPS_HOME = previousHome;
+    await fs.rm(root, { recursive: true, force: true });
+  });
   process.env.XHS_OPS_OWNER_HOME = path.join(root, 'registry');
   return { root, home: path.join(root, 'state'), other: path.join(root, 'other') };
 }
@@ -96,4 +104,29 @@ test('two processes registering different homes preserve exactly one account own
   }));
   assert.equal(outputs.filter(value => value.ok).length, 1);
   assert.equal(outputs.filter(value => value.code === 'state_owner_conflict').length, 1);
+});
+
+test('invalid binding and failed accounts rename leave the previous owner intact', async t => {
+  const f = await fixture(t);
+  process.env.XHS_OPS_HOME = f.home;
+  await fs.mkdir(f.home, { recursive: true });
+  const account = { alias: 'demo', userId: 'demo-user-001', profile: 'chrome-main' };
+  addAccount(account);
+  assert.throws(() => validateAccountBinding({ alias: 'bad alias', userId: 'demo-user-001', profile: 'chrome-main' }), /alias/);
+  process.env.XHS_OPS_HOME = f.other;
+  assert.throws(() => transferAccountBinding({ ...account, alias: 'invalid alias' }, { fromHome: f.home, reason: 'invalid alias' }), /alias/);
+  assert.equal(inspectAccountOwner(account, { home: f.home }).state, 'owned');
+  const rename = fsSync.renameSync;
+  fsSync.renameSync = () => { throw Object.assign(new Error('Simulated accounts rename failure'), { code: 'EIO' }); };
+  syncBuiltinESMExports();
+  try {
+    assert.throws(() => transferAccountBinding(account, { fromHome: f.home, reason: 'new owner ready' }), /rename failure/);
+  } finally { fsSync.renameSync = rename; syncBuiltinESMExports(); }
+  assert.equal(inspectAccountOwner(account, { home: f.home }).state, 'owned');
+  assert.deepEqual(listAccounts(), []);
+  await assert.rejects(fs.stat(accountFile()), { code: 'ENOENT' });
+  transferAccountBinding(account, { fromHome: f.home, reason: 'retry after filesystem recovered' });
+  assert.equal(listAccounts()[0].userId, account.userId);
+  assert.equal(inspectAccountOwner(account, { home: f.other }).state, 'owned');
+  assert.throws(() => transferAccountBinding({ ...account, userId: 'different-user' }, { fromHome: f.home, reason: 'wrong existing alias' }), /different binding/);
 });
