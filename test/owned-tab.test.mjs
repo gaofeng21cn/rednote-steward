@@ -15,13 +15,40 @@ test('closeOwnedTab sends only the exact adapter session context', async () => {
   const result = await closeOwnedTab(page(), {
     sendCommand: async (...args) => { calls.push(args); return { closed: true }; },
   });
-  assert.deepEqual(result, { closed: true });
+  assert.deepEqual(result, { closed: true, preparedForClose: false });
   assert.deepEqual(calls, [[ 'close-owned-tab', {
     session: 'site:xiaohongshu:profile-1',
     surface: 'adapter',
     contextId: 'context-7',
     windowMode: 'background',
   } ]]);
+});
+
+test('closeOwnedTab replaces a dirty document before requesting exact tab removal', async () => {
+  const steps = [];
+  const result = await closeOwnedTab(page({
+    evaluate: async source => { steps.push(['evaluate', source]); return true; },
+  }), {
+    sendCommand: async (...args) => { steps.push(['send', ...args]); return { closed: true }; },
+  });
+  assert.deepEqual(result, { closed: true, preparedForClose: true });
+  assert.equal(steps.length, 2);
+  assert.equal(steps[0][0], 'evaluate');
+  assert.match(steps[0][1], /window\.onbeforeunload = null/);
+  assert.match(steps[0][1], /document\.open\(\)/);
+  assert.equal(steps[1][0], 'send');
+  assert.equal(steps[1][1], 'close-owned-tab');
+});
+
+test('document preparation failure still attempts exact tab cleanup', async () => {
+  let sends = 0;
+  const result = await closeOwnedTab(page({
+    evaluate: async () => { throw new Error('document already navigated'); },
+  }), {
+    sendCommand: async () => { sends++; return { closed: true }; },
+  });
+  assert.deepEqual(result, { closed: true, preparedForClose: false });
+  assert.equal(sends, 1);
 });
 
 test('closeOwnedTab skips missing, browser-owned, and non-Xiaohongshu sessions', async () => {

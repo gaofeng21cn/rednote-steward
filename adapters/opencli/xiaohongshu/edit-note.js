@@ -31,6 +31,7 @@ cli({
     { name: 'ai-declaration', help: 'Explicit AI-generated declaration: true or false; omitted leaves the current setting' },
     { name: 'prepare-only', type: 'bool', default: false, help: 'Prepare the edit without invoking submission' },
     { name: 'upload-timeout', type: 'int', default: 600, help: 'Video upload/processing timeout in seconds' },
+    { name: 'cover-timeout', type: 'int', default: 120, help: 'Custom cover preview timeout in seconds' },
     { name: 'dry-run', type: 'bool', default: false, help: 'Open and read the note without changing or submitting it' },
   ],
   columns: ['status', 'noteId', 'title', 'body', 'topicNodes', 'topics', 'images', 'mediaType', 'videoPresent', 'video', 'cover', 'replacement', 'declarations', 'readback', 'submitted', 'snapshot', 'recovery'],
@@ -49,6 +50,10 @@ cli({
     const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) {
       throw new CommandExecutionError('upload-timeout must be between 10 and 3600 seconds');
+    }
+    const coverTimeoutSeconds = Number(kwargs['cover-timeout'] ?? 120);
+    if (!Number.isInteger(coverTimeoutSeconds) || coverTimeoutSeconds < 10 || coverTimeoutSeconds > 600) {
+      throw new CommandExecutionError('cover-timeout must be between 10 and 600 seconds');
     }
 
     await openEditor(page, noteId, video ? 'video' : 'normal');
@@ -142,7 +147,10 @@ cli({
       emitProgress('prepared', { kind: 'edit', noteId, stage: 'cover-and-copy',
         preCoverSource, savedVideoSource: videoSaved.video.src,
         cover: { previousSource: preCoverSource, selectionPending: true } });
-      coverSelection = { ...(await applyCover(page, cover[0])), preCoverSource };
+      coverSelection = {
+        ...(await applyCover(page, cover[0], { previewTimeoutMs: coverTimeoutSeconds * 1000 })),
+        preCoverSource,
+      };
       await fillTitle(page, title);
       await fillBody(page, content);
       await replaceTopics(page, topics);

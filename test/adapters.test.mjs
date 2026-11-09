@@ -397,6 +397,17 @@ test('video and cover save in two stages and verify the same reopened note', asy
   assert.ok(f.observed.opens.every(url => url.includes('id=000000000000000000000001')));
 });
 
+test('custom cover timeout is configurable and invalid values fail before browser use', async t => {
+  const command = getRegistry().get('xiaohongshu/edit-note');
+  const option = command.args.find(arg => arg.name === 'cover-timeout');
+  assert.equal(option.default, 120);
+  const f = await stagedEditFixture(t);
+  await assert.rejects(f.run({ 'cover-timeout': 5 }), /cover-timeout must be between 10 and 600 seconds/);
+  assert.equal(f.observed.opens.length, 0);
+  assert.equal(f.observed.videoUploads, 0);
+  assert.equal(f.observed.coverUploads, 0);
+});
+
 for (const savedVideo of ['unchanged', 'empty']) {
   test(`the cover stage never starts when the first saved video is ${savedVideo}`, async t => {
     const f = await stagedEditFixture(t, { savedVideo });
