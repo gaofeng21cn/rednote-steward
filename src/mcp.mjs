@@ -85,13 +85,20 @@ tool('package_ingest', 'Import a local package as a draft task. Duplicate conten
   ({ path }) => callCli(['ingest', path]), { readOnly: false });
 tool('tasks_list', 'List draft, queued and unresolved tasks.', { account: account.optional() },
   ({ account }) => callCli(['plan', ...(account ? ['--account', account] : [])]));
+tool('task_review', 'Read exact task content, frozen media, field differences and owner readback without a browser call or publication.', {
+  taskId: taskId.optional(), account: account.optional(), fingerprint: z.string().optional(), revision: z.string().optional(),
+}, ({ taskId, account, fingerprint, revision }) => callCli(['review', ...(taskId ? [taskId] : []),
+  ...(account ? ['--account', account] : []), ...(fingerprint ? ['--fingerprint', fingerprint] : []), ...(revision ? ['--revision', revision] : [])]));
 tool('task_get', 'Read task status, attempt history and platform readback. Use after task_execute.', { taskId },
   ({ taskId }) => callCli(['show', taskId]));
 tool('task_authorize', 'Record existing user authorization and queue this task. A batch instruction may cover multiple tasks.', {
   taskId, authorization: z.string().min(1).describe('The applicable user instruction or authorization reference.'),
   at: z.iso.datetime({ offset: true }).optional(),
-}, ({ taskId, authorization, at }) => callCli([
+  fingerprint: z.string().optional().describe('Expected content fingerprint from task_review.'),
+  revision: z.string().optional().describe('Expected task revision from task_review; a changed task requires reopening.'),
+}, ({ taskId, authorization, at, fingerprint, revision }) => callCli([
   'approve', taskId, '--authorization', authorization, ...(at ? ['--at', at] : ['--now']),
+  ...(fingerprint ? ['--fingerprint', fingerprint] : []), ...(revision ? ['--revision', revision] : []),
 ]), { readOnly: false });
 tool('task_execute', 'Start one authorized task in a separate worker. Returns immediately; use task_get for the outcome.', {
   taskId,
@@ -135,7 +142,7 @@ server.registerResource('capabilities', 'rednote://capabilities', {
   backend: 'OpenCLI 1.8.5 + logged-in Chrome',
   state: 'CLI and MCP share the same local account database.',
   scheduling: 'Queued due times; execution is invoked by the user or their explicitly configured scheduler.',
-  ui: 'Structured tools; a graphical MCP App is not included in this release.',
+  ui: 'Read-only task, content and media views use the OPL shared MCP App when this Package is discovered by its host. task_review and xhs-ops review return the same owner data without a UI.',
   publicationEvidence: 'Submission, field verification, platform review and reach are separate outcomes.',
 }) }] }));
 

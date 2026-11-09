@@ -50,6 +50,7 @@ Usage:
   xhs-ops ingest PACKAGE [--dry-run]
   xhs-ops approve TASK_ID [--authorization TEXT] [--at ISO8601|--now]
   xhs-ops plan [--account ALIAS] [--all]
+  xhs-ops review [TASK_ID] [--account ALIAS] [--fingerprint HASH] [--revision REVISION]
   xhs-ops show TASK_ID
   xhs-ops run [TASK_ID] [--dry-run]
   xhs-ops reconcile TASK_ID [--note-id ID] [--absent --reason TEXT]
@@ -108,8 +109,9 @@ export async function main(argv = process.argv.slice(2)) {
   else if (command === 'note') result = await controller.note(requireValue(options.account, 'note NOTE_ID --account ALIAS'), requireValue(positionals[0], 'note NOTE_ID --account ALIAS'), options['note-type'] || 'normal');
   else if (command === 'inspect') result = { ok: true, package: await inspectPackage(requireValue(positionals[0], 'inspect PACKAGE')) };
   else if (command === 'ingest') result = await controller.ingest(requireValue(positionals[0], 'ingest PACKAGE'), { dryRun: Boolean(options['dry-run']) });
-  else if (['approve', 'authorize'].includes(command)) result = controller.approve(requireValue(positionals[0], 'approve TASK_ID'), { at: options.now ? new Date().toISOString() : options.at, authorization: options.authorization });
+  else if (['approve', 'authorize'].includes(command)) result = controller.approve(requireValue(positionals[0], 'approve TASK_ID'), { at: options.now ? new Date().toISOString() : options.at, authorization: options.authorization, fingerprint: options.fingerprint, revision: options.revision });
   else if (command === 'plan') result = controller.plan({ account: options.account, all: Boolean(options.all) });
+  else if (command === 'review') result = await controller.review({ taskId: positionals[0], account: options.account, fingerprint: options.fingerprint, revision: options.revision });
   else if (command === 'show') result = controller.show(requireValue(positionals[0], 'show TASK_ID'));
   else if (command === 'run') result = await controller.execute(positionals[0], { dryRun: Boolean(options['dry-run']) });
   else if (['reconcile', 'recover'].includes(command)) result = await controller.reconcile(requireValue(positionals[0], 'reconcile TASK_ID'), { noteId: options['note-id'], absent: Boolean(options.absent), reason: options.reason });

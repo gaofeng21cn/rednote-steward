@@ -117,7 +117,7 @@ Use the installed executable's absolute path when your client does not inherit t
 
 The first release targets macOS and logged-in Chrome through OpenCLI. Image publishing, existing-post maintenance, account reads, and inventory build on the original local workflow. Video and custom-cover support are included in the adapter; automated tests exercise their control flow, while live video publication remains a separate acceptance step. Platform changes may require adapter updates.
 
-The release provides a CLI, a standard MCP Server, and an assistant Skill. A graphical MCP App is a possible follow-up. Content generation and automatic photo enhancement are performed by the tools you choose; Steward manages their prepared outputs and publication records.
+The CLI, standard MCP Server and assistant Skill share the same task owner. The source Package also declares read-only OPL shared MCP App views for task lists, exact content differences, frozen media and platform readback. Its Package admission remains development-only until carrier installation and host acceptance are completed. Use `xhs-ops review TASK_ID` or `task_review` in clients without a shared UI. Content generation and automatic photo enhancement are performed by the tools you choose; Steward manages their prepared outputs and publication records.
 
 ## Documentation and Development
 

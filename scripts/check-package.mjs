@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { verifyContentLock } from './package-lock.mjs';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,11 +12,12 @@ const packOutput = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'
 }));
 const expectedName = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name;
 const pack = parsePackOutput(packOutput, expectedName);
-const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|package\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
+const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|package\.json$|opl-package\.json$|app-contribution-adapter\.json$|plugin\.json$|\.codex-plugin\/plugin\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
 const privateFile = /(?:^|\/)(?:\.state|receipts|workers|cookies|accounts\.json|browser-profiles\.json|\.env(?:\..*)?)(?:\/|$)|\.(?:sqlite(?:-[\w]+)?|db|log)$/i;
 const localPath = /\/(?:Users|home)\/[a-zA-Z][\w.-]+\//;
 const credential = /(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/;
 const errors = [];
+try { verifyContentLock(root); } catch (error) { errors.push(error.message); }
 for (const file of pack.files) {
   if (!allowed.test(file.path) || privateFile.test(file.path)) errors.push(`Unexpected package entry: ${file.path}`);
 }
@@ -37,7 +39,8 @@ function visit(dir) {
 }
 visit(root);
 for (const required of ['src/cli.mjs', 'src/mcp.mjs', 'src/opencli-runner.mjs', 'install.sh',
-  'LICENSE', 'NOTICE', 'skills/rednote-steward/SKILL.md']) {
+  'LICENSE', 'NOTICE', 'skills/rednote-steward/SKILL.md', 'opl-package.json',
+  'app-contribution-adapter.json', 'src/app-contribution.mjs', '.codex-plugin/plugin.json']) {
   if (!pack.files.some((file) => file.path === required)) errors.push(`Missing package entry: ${required}`);
 }
 if (errors.length) {
