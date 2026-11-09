@@ -217,6 +217,6 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:a8ad072af1bc656c7a847a2e6017db7f6c30ee56bc4363c7d9a739246b8b4c46"
+    "digest": "sha256:8a4f7c0ee48d7416ed4f2cb1646283af22d853535886845298cc575b81e99137"
   }
 }

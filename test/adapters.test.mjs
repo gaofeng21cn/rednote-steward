@@ -331,7 +331,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     } else {
       persisted = { ...composer, cover: savedCover === 'unchanged'
         ? persisted.cover : savedCover === 'different' ? 'https://example.invalid/other-cover.jpg'
-          : 'https://cdn.example.invalid/selected-cover.jpg?saved=1' };
+          : 'https://cdn.example.invalid/platform-transformed-cover.jpg?saved=1' };
     }
     location.href = 'https://creator.xiaohongshu.com/publish/editSuccess';
   } });
@@ -474,14 +474,22 @@ for (const savedVideo of ['unchanged', 'empty']) {
   });
 }
 
-for (const savedCover of ['unchanged', 'different']) {
-  test(`a changed cover preview cannot verify a saved cover that is ${savedCover}`, async t => {
-    const f = await stagedEditFixture(t, { savedCover });
-    await assert.rejects(f.run(), /readback did not match/);
-    assert.equal(f.observed.submissions, 2); assert.equal(f.observed.videoUploads, 1);
-    assert.equal(f.observed.coverUploads, 1); assert.equal(f.observed.opens.length, 3);
-  });
-}
+test('a changed cover preview cannot verify a saved cover that is unchanged', async t => {
+  const f = await stagedEditFixture(t, { savedCover: 'unchanged' });
+  await assert.rejects(f.run(), /readback did not match/);
+  assert.equal(f.observed.submissions, 2); assert.equal(f.observed.videoUploads, 1);
+  assert.equal(f.observed.coverUploads, 1); assert.equal(f.observed.opens.length, 3);
+});
+
+test('a platform-transformed saved cover is accepted when its resource identity changes', async t => {
+  const f = await stagedEditFixture(t, { savedCover: 'different' });
+  const [result] = await f.run();
+  assert.equal(result.status, 'updated');
+  assert.equal(result.cover.preCoverSource, 'https://example.invalid/video-default-cover.jpg');
+  assert.equal(result.cover.savedSource, '/other-cover.jpg');
+  assert.equal(result.cover.savedSourceChanged, true);
+  assert.equal(result.cover.bytesCompared, false);
+});
 
 test('prepare-only leaves the cover stage pending and never submits either stage', async t => {
   const f = await stagedEditFixture(t);

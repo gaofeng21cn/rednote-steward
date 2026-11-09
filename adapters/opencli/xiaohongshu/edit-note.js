@@ -202,9 +202,8 @@ cli({
 
     const preCoverSource = coverSelection?.preCoverSource ?? coverSelection?.previousSource ?? null;
     const savedCoverSource = videoSourceIdentity(after.cover?.url);
-    const selectedCoverSource = videoSourceIdentity(coverSelection?.source);
-    const coverSourceChanged = cover.length && preCoverSource && savedCoverSource && selectedCoverSource
-      ? videoSourceChanged(preCoverSource, after.cover?.url) && selectedCoverSource === savedCoverSource : !cover.length;
+    const coverSourceChanged = cover.length && preCoverSource && savedCoverSource
+      ? videoSourceChanged(preCoverSource, after.cover?.url) : !cover.length;
     const verified =
       after.title === title &&
       normalizeForComparison(after.body) === normalizeForComparison(content) &&
