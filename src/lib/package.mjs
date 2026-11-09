@@ -88,7 +88,6 @@ export async function inspectPackage(input) {
   if (imagePaths.length > 18) throw new Error('images supports at most 18 entries');
   if (raw.video && imagePaths.length) throw new Error('Choose video or images for one package');
   if ((raw.cover || raw.subtitle) && !raw.video) throw new Error('cover and subtitle require video');
-  if (kind === 'edit' && raw.video) throw new Error('Video file replacement is not supported; publish a new version with replacesNoteId');
   const images = [];
   for (const [index, value] of imagePaths.entries()) images.push({ order: index + 1, ...await mediaFile(value, packageDir, 'image') });
   const video = raw.video ? await mediaFile(raw.video, packageDir, 'video') : null;
@@ -98,7 +97,7 @@ export async function inspectPackage(input) {
   if (raw.publishAt && Number.isNaN(Date.parse(raw.publishAt))) throw new Error('publishAt must be an ISO date');
   const warnings = [];
   if (/(^|\s)#\S+/.test(body)) warnings.push('Plain hashtags in the body do not create native topic associations.');
-  if (kind === 'edit' && !images.length) warnings.push('Existing media will be preserved.');
+  if (kind === 'edit' && !images.length && !video) warnings.push('Existing media will be preserved.');
   if (subtitle) warnings.push('Subtitle is a provenance asset. Use a final video with subtitles already rendered; separate subtitle upload is not supported.');
   const result = { schemaVersion: 1, manifestPath, packageDir, platform: 'xiaohongshu', kind, account,
     sourceNoteId, replacesNoteId, title, body, topics, images, imageCount: images.length,

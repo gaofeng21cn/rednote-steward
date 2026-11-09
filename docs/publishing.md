@@ -86,7 +86,32 @@ Use `kind: "edit"` and the exact existing platform note ID:
 }
 ```
 
-The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order. Video-file replacement is outside the current edit path; inspect what the platform supports before choosing an update or a new post.
+The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order.
+
+To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, waits for processing, applies an optional custom cover and the approved title/body/native topics, and reads the same note ID back after saving. The update keeps the original note ID; platform review and distribution continue to follow the platform's rules.
+
+```json
+{
+  "schemaVersion": 1,
+  "platform": "xiaohongshu",
+  "account": "education",
+  "kind": "edit",
+  "sourceNoteId": "000000000000000000000001",
+  "title": "Revised title",
+  "body": "The approved description.",
+  "topics": ["Health education"],
+  "video": "final.mp4",
+  "cover": "cover.png"
+}
+```
+
+If the platform does not expose a video file input for that note, Steward stops before submission. If the upload result is ambiguous, it retains the attempt and blocks another write until the same note is reconciled. A successful update does not imply that platform review or public visibility has completed.
+
+Read a video through its video editor with `xhs-ops note NOTE_ID --account education --note-type video`
+or `note_get` with `noteType: "video"`. Replacement verification requires the saved video resource
+to differ from the pre-edit resource. A refreshed CDN signature on the same URL path or a matching
+duration alone leaves the replacement unconfirmed. The task records file selection, prepared
+metadata and saved readback when available; transformed platform bytes remain outside this comparison.
 
 For a new edition that relates to an earlier post, include `replacesNoteId` in a publish package. This records the relationship locally. It does not delete the earlier post.
 
@@ -123,6 +148,11 @@ xhs-ops reconcile TASK_ID --absent --reason "Checked the account inventory and t
 Only use the absence path after checking. A timeout by itself says nothing about whether the platform accepted the post. Re-authorize a cleared task for a new attempt only when the original requested scope still applies.
 
 A `verified` task means the fields required by the verifier matched the available platform readback. A submission with incomplete readback retains its explicit evidence gap. Media counts and presence do not prove that transformed platform files have the same bytes as the local source.
+
+The controller passes its time budget to OpenCLI's browser command timeout, leaving a small
+interval for the subprocess to report its result before the outer deadline. On a timeout,
+reconcile the saved attempt and current composer before resuming; the elapsed time does not
+establish whether the platform accepted the update.
 
 ## Maintain an account
 

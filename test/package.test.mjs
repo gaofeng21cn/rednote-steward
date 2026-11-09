@@ -50,9 +50,13 @@ test('video, cover and subtitles are fingerprinted; a new version links to the o
   await fs.appendFile(path.join(dir,'clip.mp4'), 'changed');
   assert.notEqual((await inspectPackage(dir)).fingerprint, first.fingerprint);
 });
-test('rejects mixed image/video packages and unsupported video edits', async t => {
+test('rejects mixed image/video packages and accepts video edits', async t => {
   const mixed = await fixture(t, { video:'clip.mp4' });
   await assert.rejects(() => inspectPackage(mixed), /Choose video or images/);
   const edit = await fixture(t, { kind:'edit', sourceNoteId:'000000000000000000000001', images:[], video:'clip.mp4' });
-  await assert.rejects(() => inspectPackage(edit), /Video file replacement/);
+  await fs.writeFile(path.join(edit,'clip.mp4'), Buffer.from([0,0,0,24,102,116,121,112,105,115,111,109,0,0,0,0]));
+  const inspected = await inspectPackage(edit);
+  assert.equal(inspected.kind,'edit');
+  assert.equal(inspected.mediaType,'video');
+  assert.equal(inspected.sourceNoteId,'000000000000000000000001');
 });

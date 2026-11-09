@@ -3,11 +3,14 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parsePackOutput } from './lib/npm-pack-output.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pack = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+const packOutput = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
   cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-}))[0];
+}));
+const expectedName = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name;
+const pack = parsePackOutput(packOutput, expectedName);
 const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|package\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
 const privateFile = /(?:^|\/)(?:\.state|receipts|workers|cookies|accounts\.json|browser-profiles\.json|\.env(?:\..*)?)(?:\/|$)|\.(?:sqlite(?:-[\w]+)?|db|log)$/i;
 const localPath = /\/(?:Users|home)\/[a-zA-Z][\w.-]+\//;

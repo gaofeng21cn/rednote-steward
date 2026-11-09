@@ -6,9 +6,11 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { videoSourceChanged } from '../src/lib/media.mjs';
 import { getRegistry } from '@jackwener/opencli/registry';
 import '../adapters/opencli/xiaohongshu/inventory.js';
+import '../adapters/opencli/xiaohongshu/edit-note.js';
 
 function evaluate(source, context = {}) {
   const result = vm.runInNewContext(`(${source})`, context);
@@ -112,4 +114,80 @@ test('inventory does not mistake a missing page or login for an empty account', 
   const answers = ['https://creator.xiaohongshu.com/new/note-manager', [], { found: false }, false];
   const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
   await assert.rejects(command.func(page, { limit: 30 }), /No creator note cards loaded/);
+});
+
+function videoEditor({ inputCount = 1, uploadError = null, image = false } = {}) {
+  const title = { offsetParent: {}, value: 'Example' };
+  const body = { offsetParent: {}, querySelectorAll: () => [] };
+  const video = { currentSrc: 'https://example.invalid/old.mp4', duration: 65.13 };
+  const input = { accept: '.mp4', files: [], setAttribute() {} };
+  const context = { location: { href: 'https://creator.xiaohongshu.com/publish/update' }, document: {
+    body: { innerText: '' },
+    querySelectorAll(selector) {
+      if (selector.includes('placeholder')) return [title];
+      if (selector.includes('tiptap')) return [body];
+      if (selector === 'input[type="file"]') return Array(inputCount).fill(input);
+      return [];
+    },
+    querySelector(selector) {
+      if (selector === 'video') return image ? null : video;
+      if (selector === '.img-container') return image ? {} : null;
+      if (selector.includes('tiptap')) return body;
+      if (selector.includes('data-steward-video-replacement')) return input;
+      return null;
+    },
+  } };
+  let uploads = 0;
+  const page = {
+    goto: async url => { context.location.href = url; }, wait: async () => {},
+    evaluate: source => evaluate(source, context),
+    async setFileInput(files) {
+      uploads++;
+      if (uploadError) throw new Error(uploadError);
+      const stat = await fs.stat(files[0]);
+      input.files = [{ name: path.basename(files[0]), size: stat.size }];
+      video.currentSrc = 'blob:prepared-video';
+    },
+  };
+  return { page, uploads: () => uploads, context };
+}
+
+test('video replacement selects one native input once and retains preparation evidence', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-video-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const video = path.join(dir, 'clip.mp4');
+  await fs.writeFile(video, 'synthetic video');
+  const editor = videoEditor();
+  const evidence = await replaceVideo(editor.page, video);
+  assert.equal(editor.uploads(), 1);
+  assert.equal(evidence.selectedFile.name, 'clip.mp4');
+  assert.equal(evidence.before.src, 'https://example.invalid/old.mp4');
+  assert.equal(evidence.prepared.src, 'blob:prepared-video');
+  const ambiguous = videoEditor({ inputCount: 2 });
+  await assert.rejects(replaceVideo(ambiguous.page, video), /unavailable/);
+  assert.equal(ambiguous.uploads(), 0);
+  const lost = videoEditor({ uploadError: 'Connection lost after upload' });
+  await assert.rejects(replaceVideo(lost.page, video), /Connection lost/);
+  assert.equal(lost.uploads(), 1);
+});
+
+test('video edit rejects an image target before changing its fields or media', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-target-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const video = path.join(dir, 'clip.mp4');
+  await fs.writeFile(video, 'synthetic video');
+  const editor = videoEditor({ image: true });
+  const command = getRegistry().get('xiaohongshu/edit-note');
+  await assert.rejects(command.func(editor.page, { 'note-id': '000000000000000000000001',
+    title: 'Example', content: 'Caption', video }), /existing video note/);
+  assert.equal(editor.uploads(), 0);
+  assert.match(editor.context.location.href, /noteType=video/);
+});
+
+test('renewed CDN signatures and blob previews do not prove a changed saved video', () => {
+  const original = 'https://example.invalid/video.mp4?signature=old';
+  assert.equal(videoSourceChanged(original, 'https://example.invalid/video.mp4?signature=new'), false);
+  assert.equal(videoSourceChanged(original, 'https://other-cdn.invalid/video.mp4'), false);
+  assert.equal(videoSourceChanged(original, 'blob:prepared-video'), false);
+  assert.equal(videoSourceChanged(original, 'https://example.invalid/revised.mp4'), true);
 });

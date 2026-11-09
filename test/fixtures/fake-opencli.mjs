@@ -19,10 +19,14 @@ else if (['steward-publish','edit-note'].includes(command)) {
   state.writes++;
   const id = command === 'edit-note' ? args[2] : state.writes.toString(16).padStart(24, '0');
   const video = args.includes('--video');
+  const previous = state.notes.find(note => note.noteId === id);
   const topics = option('--topics').split(',').filter(Boolean).map((name, i) => ({ id: `topic-${i + 1}`, name }));
   const row = { noteId: id, title: option('--title'), body: command === 'edit-note' ? option('--content') : args[2], topics,
     imageCount: args.includes('--images') ? option('--images').split(',').length : video ? 0 : 1,
-    mediaType: video ? 'video' : 'image', videoPresent: video, cover: video ? { url: 'https://example.invalid/cover.jpg' } : null,
+    mediaType: video ? 'video' : 'image', videoPresent: video,
+    video: video ? (process.env.FAKE_MODE === 'keep-video' ? previous?.video
+      : { src: `https://example.invalid/video-${state.writes}.mp4`, duration: 65.13 }) : null,
+    cover: video ? { url: 'https://example.invalid/cover.jpg' } : null,
     verification: { title: true, body: true, nativeTopics: true, imageCount: true } };
   state.notes = [...state.notes.filter(note => note.noteId !== id), row]; save();
   if (process.env.FAKE_MODE === 'unknown') { process.stderr.write('Connection lost after submission\n'); process.exitCode = 1; }

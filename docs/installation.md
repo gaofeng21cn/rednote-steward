@@ -121,4 +121,8 @@ node src/cli.mjs help
 npm test
 ```
 
+To try changes that have reached `main` before a versioned release, install
+the checkout explicitly with `bash install.sh --source "$PWD"`. The public
+one-command installer continues to select its pinned release tag.
+
 For an isolated installer check, use its `--source PATH`, `--skip-browser-setup`, and `--skip-integrations` options with separate installation, binary, and state directories. Production browser sessions are unnecessary for this check.

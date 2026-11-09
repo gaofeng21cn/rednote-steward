@@ -6,6 +6,7 @@ import { openDatabase, transaction, addEvent, rowToTask, claimTask } from './db.
 import { inspectPackage, verifyFrozenPackage, normalizeText } from './package.mjs';
 import { publishArgs, editArgs, readInventory, readNote, readMetrics, runOpencli, verifiedIdentity, rowOf } from './opencli.mjs';
 import { auditRows, reviewCandidates } from './audit.mjs';
+import { videoSourceChanged } from './media.mjs';
 
 const now = () => new Date().toISOString();
 const serialize = value => value == null ? null : JSON.stringify(value);
@@ -35,7 +36,12 @@ export function compareReadback(task, row, publication = null) {
   };
   const baseline = task.baseline_note;
   if (task.video) {
-    checks.media = row?.mediaType === 'video' && row?.videoPresent === true;
+    checks.media = row?.mediaType === 'video' && row?.videoPresent === true && row.video?.duration > 0;
+    if (task.kind === 'edit') {
+      checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
+      const preparedDuration = publication?.replacement?.prepared?.duration;
+      if (preparedDuration > 0) checks.videoDuration = Math.abs(row?.video?.duration - preparedDuration) <= 0.5;
+    }
     if (task.cover) checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
   } else if (task.images.length) {
     checks.media = row?.mediaType === 'image' && row?.verification?.imageCount === true && row.imageCount === task.images.length;
@@ -46,8 +52,10 @@ export function compareReadback(task, row, publication = null) {
   }
   return {
     matched: Object.values(checks).every(Boolean), checks,
-    scope: 'Observable title, body, native topics and media presence/count',
+    scope: 'Observable title, body, native topics, media presence/count and changed video resource for replacements',
     limits: { mediaBytes: 'not-compared', imageOrder: 'platform-urls-only',
+      videoReplacement: task.kind === 'edit' && task.video
+        ? (checks.videoReplacement ? 'saved-source-changed; bytes-not-compared' : 'unconfirmed') : 'not-requested',
       customCover: task.cover ? (checks.customCover ? 'selection-confirmed-and-cover-present' : 'not-confirmed') : 'not-requested',
       publicVisibility: 'not-evaluated', moderation: 'not-evaluated' },
   };
@@ -135,11 +143,11 @@ export class Controller {
     if (!Array.isArray(notes)) throw new Error('Inventory did not return an array');
     return { ok: true, account: alias, identity, notes };
   }
-  async note(alias, id) {
+  async note(alias, id, noteType = 'normal') {
     checkNoteId(id);
     const account = getAccount(alias);
     const identity = await verifiedIdentity(account);
-    const note = rowOf(resultData(await readNote(id, account.profile), 'Note readback'));
+    const note = rowOf(resultData(await readNote(id, account.profile, noteType), 'Note readback'));
     if (note?.noteId !== id) throw new Error('Readback note ID did not match the requested note');
     return { ok: true, account: alias, identity, note };
   }
@@ -167,7 +175,8 @@ export class Controller {
   }
   async completeReadback(task, noteId, publication = null) {
     checkNoteId(noteId);
-    const row = rowOf(resultData(await readNote(noteId, task.browser_profile), 'Note readback'));
+    const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
+    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Note readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
     const state = verification.matched ? 'verified' : 'submitted';
     const error = verification.matched ? null : 'Submission located; some requested fields still need review';
@@ -203,9 +212,10 @@ export class Controller {
         if (!Array.isArray(rows)) throw new Error('Pre-submit inventory is not an array');
         beforeIds = rows.map(row => String(row.id));
       } else {
-        beforeNote = rowOf(resultData(await readNote(task.source_note_id, account.profile), 'Pre-edit note'));
+        beforeNote = rowOf(resultData(await readNote(task.source_note_id, account.profile, task.video ? 'video' : 'normal'), 'Pre-edit note'));
         if (beforeNote?.noteId !== task.source_note_id) throw new Error('Pre-edit note ID mismatch');
         if (task.images.length && beforeNote.mediaType === 'video') throw new Error('Video notes cannot replace media with images');
+        if (task.video && beforeNote.mediaType !== 'video') throw new Error('Video replacement requires an existing video note');
       }
       task = { ...task, baseline_ids: beforeIds, baseline_note: beforeNote };
       this.withDatabase(db => transaction(db, () => {

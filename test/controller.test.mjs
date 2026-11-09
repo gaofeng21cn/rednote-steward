@@ -133,7 +133,7 @@ test('plain topic text and missing custom-cover confirmation never produce verif
   const row={noteId:task.platform_note_id,title:task.title,body:task.body,topics:['城市漫步'],imageCount:1,mediaType:'image',verification:{title:true,body:true,nativeTopics:true,imageCount:true}};
   assert.equal(compareReadback(task,row).matched,false);
   const videoTask={...task,images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
-  const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,cover:{url:'https://example.invalid/cover'}};
+  const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,video:{duration:65.13},cover:{url:'https://example.invalid/cover'}};
   assert.equal(compareReadback(videoTask,videoRow).matched,false);
   assert.equal(compareReadback(videoTask,videoRow,{cover:{confirmationClicked:true}}).matched,true);
 });
@@ -149,4 +149,59 @@ test('video with a custom cover flows through publication and explicit field ver
   assert.equal(result.json.verification.limits.customCover,'selection-confirmed-and-cover-present');
   assert.equal(result.json.verification.limits.mediaBytes,'not-compared');
   assert.equal((await platform(f.env)).writes,1);
+});
+
+async function videoEdit(t, { cover = false, imageTarget = false } = {}) {
+  const f = await fixture(t);
+  const noteId = '00000000000000000000000a';
+  const original = { noteId, title: 'Previous edition', body: 'Original caption', topics: [],
+    imageCount: imageTarget ? 1 : 0, mediaType: imageTarget ? 'image' : 'video', videoPresent: !imageTarget,
+    video: imageTarget ? null : { src: 'https://example.invalid/previous.mp4', duration: 65.13 },
+    verification: { title: true, body: true, nativeTopics: true, imageCount: true } };
+  await fs.writeFile(f.env.FAKE_OPENCLI_STATE, JSON.stringify({ notes: [original], writes: 0 }));
+  const dir = await f.content('Revised video', { kind: 'edit', sourceNoteId: noteId,
+    images: [], video: 'clip.mp4', ...(cover ? { cover: 'image.png' } : {}) });
+  await fs.writeFile(path.join(dir, 'clip.mp4'), Buffer.from([0,0,0,24,102,116,121,112,105,115,111,109,0,0,0,0]));
+  const imported = await command(['ingest', dir], f.env);
+  assert.equal(imported.code, 0, imported.stderr);
+  await command(['approve', imported.json.taskId, '--authorization', 'Replace this synthetic edition'], f.env);
+  return { ...f, id: imported.json.taskId, noteId };
+}
+
+test('video replacement and cover keep the same note ID with changed saved media', async t => {
+  const f = await videoEdit(t, { cover: true });
+  const result = await command(['run', f.id], f.env);
+  assert.equal(result.json.state, 'verified', JSON.stringify(result));
+  assert.equal(result.json.platformNoteId, f.noteId);
+  assert.equal(result.json.verification.checks.videoReplacement, true);
+  assert.equal(result.json.verification.limits.mediaBytes, 'not-compared');
+  const state = await platform(f.env);
+  assert.equal(state.notes.length, 1);
+  assert.equal(state.writes, 1);
+});
+
+test('a timed-out video replacement reconciles the saved note without resubmitting', async t => {
+  const f = await videoEdit(t);
+  const unknown = await command(['run', f.id], { ...f.env, FAKE_MODE: 'unknown' });
+  assert.equal(unknown.json.state, 'needs_review');
+  const result = await command(['reconcile', f.id], f.env);
+  assert.equal(result.json.state, 'verified', JSON.stringify(result));
+  assert.equal(result.json.platformNoteId, f.noteId);
+  assert.equal((await platform(f.env)).writes, 1);
+});
+
+test('matching copy and duration cannot verify a video that remained unchanged', async t => {
+  const f = await videoEdit(t);
+  const result = await command(['run', f.id], { ...f.env, FAKE_MODE: 'keep-video' });
+  assert.equal(result.json.state, 'submitted');
+  assert.equal(result.json.verification.checks.videoReplacement, false);
+  assert.equal((await platform(f.env)).writes, 1);
+});
+
+test('a video replacement cannot write to an image note', async t => {
+  const f = await videoEdit(t, { imageTarget: true });
+  const result = await command(['run', f.id], f.env);
+  assert.equal(result.json.state, 'failed');
+  assert.match(result.json.error, /existing video note/);
+  assert.equal((await platform(f.env)).writes, 0);
 });

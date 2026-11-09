@@ -45,7 +45,7 @@ Usage:
   xhs-ops account add ALIAS --user-id ID --profile PROFILE [--name NAME]
   xhs-ops account list
   xhs-ops inventory --account ALIAS [--limit 100]
-  xhs-ops note NOTE_ID --account ALIAS
+  xhs-ops note NOTE_ID --account ALIAS [--note-type video]
   xhs-ops inspect PACKAGE
   xhs-ops ingest PACKAGE [--dry-run]
   xhs-ops approve TASK_ID [--authorization TEXT] [--at ISO8601|--now]
@@ -105,7 +105,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
     result = { ok: checks.every(check => check.ok), checks };
   } else if (command === 'inventory') result = await controller.inventory(requireValue(options.account, 'inventory --account ALIAS'), integer(options.limit, 100));
-  else if (command === 'note') result = await controller.note(requireValue(options.account, 'note NOTE_ID --account ALIAS'), requireValue(positionals[0], 'note NOTE_ID --account ALIAS'));
+  else if (command === 'note') result = await controller.note(requireValue(options.account, 'note NOTE_ID --account ALIAS'), requireValue(positionals[0], 'note NOTE_ID --account ALIAS'), options['note-type'] || 'normal');
   else if (command === 'inspect') result = { ok: true, package: await inspectPackage(requireValue(positionals[0], 'inspect PACKAGE')) };
   else if (command === 'ingest') result = await controller.ingest(requireValue(positionals[0], 'ingest PACKAGE'), { dryRun: Boolean(options['dry-run']) });
   else if (['approve', 'authorize'].includes(command)) result = controller.approve(requireValue(positionals[0], 'approve TASK_ID'), { at: options.now ? new Date().toISOString() : options.at, authorization: options.authorization });

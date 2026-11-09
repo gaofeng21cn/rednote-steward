@@ -76,8 +76,9 @@ tool('doctor', 'Check the local installation and browser connection; optionally 
 }, ({ account }) => callCli(['doctor', ...(account ? ['--account', account] : [])]), { browser: true });
 tool('notes_list', 'Read the account creator inventory.', { account, limit },
   ({ account, limit }) => callCli(['inventory', '--account', account, '--limit', String(limit)]), { browser: true });
-tool('note_get', 'Read the same platform note title, body, native topics and exposed media fields.', { account, noteId },
-  ({ account, noteId }) => callCli(['note', noteId, '--account', account]), { browser: true });
+tool('note_get', 'Read the same platform note title, body, native topics and exposed media fields.', {
+  account, noteId, noteType: z.enum(['normal', 'video']).default('normal'),
+}, ({ account, noteId, noteType }) => callCli(['note', noteId, '--account', account, '--note-type', noteType]), { browser: true });
 tool('package_inspect', 'Validate a local image or video package and calculate its content fingerprint.', { path: packagePath },
   ({ path }) => callCli(['inspect', path, '--json']));
 tool('package_ingest', 'Import a local package as a draft task. Duplicate content is detected.', { path: packagePath },

@@ -34,4 +34,10 @@ For personal travel and everyday photos, preserve concrete discoveries, the auth
 
 For prepared medical or educational videos, use the approved media, cover, copy, and relevant source records. Keep publication management separate from new clinical claims or content production. A revised episode may need linking to an older note before choosing edit or new publication.
 
+When the existing video editor supports replacement, use an `edit` package with the same
+`sourceNoteId`, `video`, and optional `cover`. Read the video editor with `noteType: "video"`
+or `--note-type video`. Check that the saved video resource changed; the same title, topics
+or duration alone cannot establish a replacement. Preserve the active composer and reconcile
+an interrupted attempt before uploading again.
+
 Run inspections on request. Configure recurring work only when the user asks for a schedule. Keep technical checks and task records out of public captions.

@@ -18,6 +18,9 @@ export function runOpencli(args, { timeoutMs = 300_000, profile, onSpawn } = {})
     const argv = override ? args : [runner, ...args];
     const env = { ...process.env };
     if (profile) env.OPENCLI_PROFILE = profile;
+    // Let OpenCLI report a timeout before the outer process deadline kills it.
+    const browserSeconds = Math.max(1, Math.floor((timeoutMs - Math.min(5000, timeoutMs / 2)) / 1000));
+    env.OPENCLI_BROWSER_COMMAND_TIMEOUT = String(browserSeconds);
     const child = spawn(executable, argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '', timedOut = false, settled = false, escalation, spawnSetupError = false;
     if (child.pid && onSpawn) {
@@ -46,8 +49,8 @@ export function readAccount(profile) {
 export function readInventory(limit = 30, profile) {
   return runOpencli(['xiaohongshu', 'inventory', '--limit', String(limit), ...browserArgs], { profile });
 }
-export function readNote(id, profile) {
-  return runOpencli(['xiaohongshu', 'steward-read-note', id, ...browserArgs], { profile });
+export function readNote(id, profile, noteType = 'normal') {
+  return runOpencli(['xiaohongshu', 'steward-read-note', id, '--note-type', noteType, ...browserArgs], { profile });
 }
 export function readMetrics(limit = 120, profile) {
   return runOpencli(['xiaohongshu', 'creator-notes-summary', '--limit', String(limit), '--timeout', '600', ...browserArgs], { timeoutMs: 660_000, profile });
@@ -64,6 +67,8 @@ export function editArgs(task) {
   const args = ['xiaohongshu', 'edit-note', task.source_note_id, '--title', task.title,
     '--content', task.body, '--topics', task.topics.join(',')];
   if (task.images.length) args.push('--images', task.images.map(image => image.path).join(','));
+  if (task.video) args.push('--video', task.video.path);
+  if (task.cover) args.push('--cover', task.cover.path);
   args.push(...browserArgs);
   return args;
 }
