@@ -2,6 +2,7 @@ import { cli, Strategy } from '@jackwener/opencli/registry';
 import { CommandExecutionError } from '@jackwener/opencli/errors';
 import { validateNoteId, openEditor, readEditor, waitFor } from './editor-helpers.mjs';
 import { readDeclarations } from './declarations.mjs';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 export async function readNote(page, noteId, noteType = 'normal') {
   if (!['normal', 'video'].includes(noteType)) throw new CommandExecutionError('note-type must be normal or video');
@@ -36,5 +37,7 @@ cli({
     { name: 'note-type', default: 'normal', help: 'normal or video editor' },
   ],
   columns: ['noteId', 'title', 'body', 'topics', 'imageCount', 'images', 'mediaType', 'videoPresent', 'video', 'cover', 'declarations', 'verification', 'url'],
-  func: async (page, kwargs) => [await readNote(page, String(kwargs['note-id'] ?? ''), kwargs['note-type'] || 'normal')],
+  func: withOwnedTabCleanup(async (page, kwargs) => [
+    await readNote(page, String(kwargs['note-id'] ?? ''), kwargs['note-type'] || 'normal'),
+  ]),
 });

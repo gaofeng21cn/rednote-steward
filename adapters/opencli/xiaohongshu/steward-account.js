@@ -1,5 +1,6 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 // Read the creator session itself: a public-site login may belong to a different account.
 export function creatorIdentityScript() {
@@ -44,5 +45,5 @@ cli({
   access: 'read', domain: 'creator.xiaohongshu.com', strategy: Strategy.COOKIE,
   browser: true, navigateBefore: false, args: [],
   columns: ['logged_in', 'userId', 'username', 'identitySource'],
-  func: async page => [await readCreatorIdentity(page)],
+  func: withOwnedTabCleanup(async page => [await readCreatorIdentity(page)]),
 });

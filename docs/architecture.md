@@ -63,6 +63,8 @@ Backups use a consistent SQLite snapshot with configuration and selected receipt
 
 OpenCLI performs browser operations through Browser Bridge. The controller owns task identity, package version, account serialization, authorization records, and recovery. Adapters own the actual page interaction and expose what the platform returned.
 
+Every packaged Xiaohongshu adapter closes its exact owned tab on success and error through Browser Bridge's `close-owned-tab` action. Creator editors register a departure warning, so a generic lease release that navigates the tab to `about:blank` can leave the user with a confirmation prompt and an accumulating tab. Hard tab cleanup applies only to the adapter-owned session; user tabs and other sessions remain outside its scope.
+
 The local browser workflow focuses on macOS and one backend. Optional backends can later implement the same task semantics after their media, cover, native-topic, editing, and readback behavior has been verified. The OPL shared MCP App reads the existing queue through `src/app-contribution.mjs`; it owns no task state. Task, content and media views use the existing Package descriptor and contribution ABI. `review` opens SQLite read-only and never initializes a database, starts a worker, or reads the platform. Review data includes the frozen content fingerprint, the stored task revision, source drift, same-note field verification and separate publication evidence. Media drift disables the artifact link rather than presenting changed bytes as the frozen asset.
 
 ## Verification

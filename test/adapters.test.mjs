@@ -9,6 +9,7 @@ import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/
 import { sameTopics, replaceVideo } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
 import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
+import { withOwnedTabCleanup } from '../adapters/opencli/xiaohongshu/owned-tab.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
 import { getRegistry } from '@jackwener/opencli/registry';
 import '../adapters/opencli/xiaohongshu/inventory.js';
@@ -18,6 +19,51 @@ function evaluate(source, context = {}) {
   const result = vm.runInNewContext(`(${source})`, context);
   return typeof result === 'function' ? result() : result;
 }
+
+test('owned-tab cleanup runs after adapter success and failure', async () => {
+  const page = { session: 'site:xiaohongshu:test' };
+  const calls = [];
+  const success = withOwnedTabCleanup(async () => {
+    calls.push('operation-success');
+    return 'ok';
+  }, { close: async received => calls.push(`close:${received.session}`) });
+  assert.equal(await success(page, {}), 'ok');
+
+  const failure = withOwnedTabCleanup(async () => {
+    calls.push('operation-failure');
+    throw new Error('business failed');
+  }, { close: async received => calls.push(`close:${received.session}`) });
+  await assert.rejects(failure(page, {}), /business failed/);
+  assert.deepEqual(calls, [
+    'operation-success',
+    'close:site:xiaohongshu:test',
+    'operation-failure',
+    'close:site:xiaohongshu:test',
+  ]);
+});
+
+test('cleanup failure never masks the original business error', async () => {
+  const reported = [];
+  const operation = withOwnedTabCleanup(async () => {
+    throw new Error('business failed');
+  }, {
+    close: async () => { throw new Error('cleanup failed'); },
+    report: (...values) => reported.push(values),
+  });
+  await assert.rejects(operation({ session: 'site:xiaohongshu:test' }), /business failed/);
+  assert.equal(reported.length, 0);
+});
+
+test('successful work reports cleanup failure without changing its result', async () => {
+  const reported = [];
+  const operation = withOwnedTabCleanup(async () => ({ status: 'submitted' }), {
+    close: async () => { throw new Error('cleanup failed'); },
+    report: (...values) => reported.push(values),
+  });
+  assert.deepEqual(await operation({ session: 'site:xiaohongshu:test' }), { status: 'submitted' });
+  assert.equal(reported.length, 1);
+  assert.match(reported[0][1].message, /cleanup failed/);
+});
 
 test('page classification uses the observed path and ignores redirect query text', () => {
   assert.equal(assertCreatorLocation('https://creator.xiaohongshu.com/publish/update?id=abc&redirect=/captcha/login').pathname, '/publish/update');
