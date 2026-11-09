@@ -10,7 +10,7 @@ The application uses its packaged OpenCLI registry and adapters. It leaves an in
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh | bash
 ```
 
-The script installs the default release, `v0.2.0`, into your user directory. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
+The script installs the default release, `v0.2.1`, into your user directory. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
 
 Versioned installs download the release asset and its `SHA256SUMS`, then check the archive and package's `release-manifest.json` before selecting it. The manifest records the source revision and digest of public installation inputs. A local `--source` install generates the same manifest with its actual revision and dirty state. Explicit installation of the original `v0.1.0` retains its older source-archive route.
 
@@ -108,7 +108,7 @@ Install a specific published version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh \
-  | bash -s -- --version v0.2.0
+  | bash -s -- --version v0.2.1
 ```
 
 Run the packaged uninstaller to remove managed installation files and integrations:

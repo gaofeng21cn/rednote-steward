@@ -113,7 +113,26 @@ Use `kind: "edit"` and the exact existing platform note ID:
 
 The note ID above is synthetic; replace it with the result of the account inventory. An empty `images` array preserves the current images. Providing images requests replacement with those files in order.
 
-To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, waits for processing, applies an optional custom cover and the approved title/body/native topics, and reads the same note ID back after saving. The update keeps the original note ID; platform review and distribution continue to follow the platform's rules.
+To replace the finished video in an existing video note, include `video` in an `edit` package. The package must name the existing video note in `sourceNoteId`; Steward uploads the new file through the video editor's native file input, applies the approved title/body/native topics, and reads the same note ID back after saving. The update keeps the original note ID; platform review and distribution continue to follow the platform's rules.
+
+When the package also includes `cover`, the creator UI may keep its cover
+confirmation disabled until the replacement video has itself been saved.
+Steward therefore saves the video and approved copy first, reads the saved video
+from the same note ID, then selects and saves the custom cover. Each stage invokes
+submission once. Final readback checks that the cover matches the selected resource
+and differs from the cover saved before the cover stage. CDN host or signature
+changes alone do not count as a resource change; this comparison does not compare
+transformed image bytes.
+
+The attempt retains stage and cover-selection evidence for read-only recovery if
+the final adapter response is lost. If a stage stops, inspect `show`, `handoff` and
+the same platform note, then reconcile it. A saved video with an unfinished cover
+remains unresolved; starting the whole package again would upload the video again.
+Complete that remaining stage against the same note and reconcile the original
+task. Automatic verification needs the recorded selected-cover resource. If the
+attempt stopped before that selection, its readback remains marked for review.
+`prepare-only` stops before the first save and reports that the cover stage is
+still pending.
 
 ```json
 {

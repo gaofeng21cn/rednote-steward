@@ -99,6 +99,8 @@ xhs-ops show TASK_ID
 
 An assistant can record an existing authorization for the requested batch; the `approve` command does not require another conversational approval. For video, use `video` and optional `cover` fields in place of `images`. Native topic names belong in `topics`; the adapter selects platform candidates during publishing.
 
+Replacing an existing video and its custom cover uses two saves on the same note: video and copy first, then the cover. Stage evidence supports recovery without uploading the saved video again.
+
 See [publishing and recovery](docs/publishing.md) for video packages, edits, scheduling, and interrupted tasks. [Synthetic examples](examples/) contain no account data or real posts.
 
 ## Manage a Prepared Batch

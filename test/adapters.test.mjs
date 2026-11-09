@@ -6,9 +6,8 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics, replaceVideo } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo, readEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
-import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
 import { getRegistry } from '@jackwener/opencli/registry';
 import '../adapters/opencli/xiaohongshu/inventory.js';
@@ -51,37 +50,6 @@ test('unknown upload failure never retries attachment', async () => {
   const page = { setFileInput: async () => { calls++; throw new Error('Bridge connection lost'); } };
   await assert.rejects(attachFiles(page, ['/synthetic/video.mp4'], 'input'), /connection lost/);
   assert.equal(calls, 1);
-});
-
-test('custom cover waits for visible uploads and confirms the selected filename', async () => {
-  let uploads = 0, closed = false;
-  const image = { src: 'https://example.invalid/old.jpg', complete: true, naturalWidth: 100 };
-  const confirm = { disabled: false, innerText: '保存', click() { closed = true; dialog.offsetParent = null; } };
-  const input = { accept: 'image/png', files: [], setAttribute() {}, closest: () => dialog };
-  const dialog = { offsetParent: {}, querySelectorAll(selector) {
-    if (selector === 'input[type="file"]') return [input];
-    if (selector === 'img') return [image];
-    if (selector.includes('loading')) return [{ offsetParent: null }];
-    if (selector.startsWith('button')) return [confirm];
-    return [];
-  } };
-  const document = {
-    querySelector: () => input,
-    querySelectorAll(selector) {
-      if (selector.startsWith('button')) return [{ offsetParent: {}, innerText: '编辑封面', click() {} }];
-      if (selector.startsWith('[role="dialog"] button')) return [{ offsetParent: {}, innerText: '上传图片', click() {} }];
-      if (selector.startsWith('[role="dialog"],')) return [dialog];
-      return [];
-    },
-  };
-  const page = { wait: async () => {}, evaluate: source => evaluate(source, { document }),
-    setFileInput: async () => { uploads++; input.files = [{ name: 'cover.png' }]; image.src = 'blob:new-cover'; } };
-  const result = await applyCover(page, '/synthetic/cover.png');
-  assert.equal(result.confirmationClicked, true);
-  assert.equal(result.filename, 'cover.png');
-  assert.equal(result.identityVerifiedAfterSave, false);
-  assert.equal(uploads, 1);
-  assert.equal(closed, true);
 });
 
 test('prepare-only returns the observed composer without invoking submission', async t => {
@@ -188,7 +156,7 @@ test('inventory does not mistake a missing page or login for an empty account', 
   await assert.rejects(command.func(page, { limit: 30 }), /No creator note cards loaded/);
 });
 
-function videoEditor({ inputCount = 1, uploadError = null, image = false } = {}) {
+function videoEditor({ inputCount = 1, uploadError = null, image = false, durationAfterUpload = 65.13 } = {}) {
   const title = { offsetParent: {}, value: 'Example' };
   const body = { offsetParent: {}, querySelectorAll: () => [] };
   const video = { currentSrc: 'https://example.invalid/old.mp4', duration: 65.13 };
@@ -219,6 +187,7 @@ function videoEditor({ inputCount = 1, uploadError = null, image = false } = {})
       const stat = await fs.stat(files[0]);
       input.files = [{ name: path.basename(files[0]), size: stat.size }];
       video.currentSrc = 'blob:prepared-video';
+      video.duration = durationAfterUpload;
     },
   };
   return { page, uploads: () => uploads, context };
@@ -243,6 +212,49 @@ test('video replacement selects one native input once and retains preparation ev
   assert.equal(lost.uploads(), 1);
 });
 
+test('video replacement does not wait for a transient null browser duration', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-video-duration-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const video = path.join(dir, 'clip.mp4');
+  await fs.writeFile(video, 'synthetic video');
+  const editor = videoEditor({ durationAfterUpload: null });
+  const evidence = await replaceVideo(editor.page, video);
+  assert.equal(evidence.prepared.src, 'blob:prepared-video');
+  assert.equal(evidence.prepared.duration, null);
+});
+
+test('video readback uses the real cover preview instead of a decorative data image', async () => {
+  const title = { offsetParent: {}, value: 'Example' };
+  const topic = { getAttribute: () => JSON.stringify({ id: 'topic-1', name: '城市漫步' }), textContent: '#城市漫步' };
+  const paragraph = { cloneNode() {
+    return { innerText: 'Caption', textContent: 'Caption', querySelectorAll: () => [] };
+  } };
+  const body = { offsetParent: {}, querySelectorAll(selector) {
+    if (selector === ':scope > p') return [paragraph];
+    if (selector === 'a.tiptap-topic') return [topic];
+    return [];
+  } };
+  const video = { currentSrc: 'https://example.invalid/video.mp4', duration: NaN };
+  const cover = { style: { backgroundImage: 'url("https://example.invalid/cover.jpg")' } };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector.includes('placeholder')) return [title];
+      if (selector.includes('tiptap')) return [body];
+      if (selector === 'video') return [video];
+      if (selector === '.img-container') return [];
+      return [];
+    },
+    querySelector(selector) {
+      if (selector === 'video') return video;
+      if (selector.includes('cover-plugin-preview')) return cover;
+      return null;
+    },
+  };
+  const row = await readEditor({ evaluate: async source => evaluate(source, { document, location: { href: 'https://creator.xiaohongshu.com/publish/update' } }) });
+  assert.equal(row.cover.url, 'https://example.invalid/cover.jpg');
+  assert.equal(row.video.duration, null);
+});
+
 test('video edit rejects an image target before changing its fields or media', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-target-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
@@ -263,3 +275,162 @@ test('renewed CDN signatures and blob previews do not prove a changed saved vide
   assert.equal(videoSourceChanged(original, 'blob:prepared-video'), false);
   assert.equal(videoSourceChanged(original, 'https://example.invalid/revised.mp4'), true);
 });
+
+// Exercise the registered adapter against an actual DOM-shaped editor. Each
+// goto reloads persisted state, so preview changes cannot masquerade as saves.
+function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', throwAtSubmit = 0 } = {}) {
+  const observed = { opens: [], submissions: 0, videoUploads: 0, coverUploads: 0, coverConfirmations: 0 };
+  const attrs = properties => Object.defineProperties({ offsetParent: {}, attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; },
+    hasAttribute(name) { return Object.hasOwn(this.attributes, name); },
+    getAttribute(name) { return this.attributes[name] ?? null; },
+  }, Object.getOwnPropertyDescriptors(properties));
+  let persisted = { title: 'Original', body: 'Original caption',
+    video: 'https://example.invalid/original.mp4', cover: 'https://example.invalid/original-cover.jpg' };
+  let composer = { ...persisted }, dialogOpen = false, thumbnails = [];
+  const location = { href: '' };
+  const title = attrs({ get value() { return composer.title; } });
+  const paragraph = { cloneNode: () => ({ innerText: composer.body, querySelectorAll: () => [] }) };
+  const body = attrs({ querySelectorAll(selector) { return selector === ':scope > p' ? [paragraph] : []; } });
+  const video = { get currentSrc() { return composer.video; }, duration: null, querySelector: () => null };
+  const preview = attrs({ get style() { return { backgroundImage: `url("${composer.cover}")` }; } });
+  const videoInput = attrs({ accept: 'video/mp4', files: [] });
+  const coverInput = attrs({ accept: 'image/png', files: [], closest: () => dialog });
+  const complete = attrs({ innerText: '完成', disabled: false, click() {
+    observed.coverConfirmations++; dialogOpen = false;
+    composer.cover = 'https://example.invalid/selected-cover.jpg?preview=1';
+  } });
+  const dialog = attrs({ get offsetParent() { return dialogOpen ? {} : null; },
+    contains: el => el === coverInput,
+    querySelectorAll(selector) {
+      if (selector === 'input[type="file"]') return [coverInput];
+      if (selector === 'img') return thumbnails;
+      if (selector === 'button, [role="button"]') return [complete];
+      if (selector === '[class*="loading"], [class*="uploading"]') return [];
+      throw new Error(`Unexpected dialog selector ${selector}`);
+    },
+  });
+  const entry = attrs({ click() { dialogOpen = true; thumbnails = [{ src: composer.cover, complete: true, naturalWidth: 100 }]; } });
+  const host = attrs({ getBoundingClientRect: () => ({ width: 100, height: 30 }), _onPublish() {
+    observed.submissions++;
+    if (throwAtSubmit === observed.submissions) throw new Error('Connection lost after submit invocation');
+    if (observed.submissions === 1) {
+      persisted = { ...composer,
+        video: savedVideo === 'empty' ? '' : savedVideo === 'unchanged' ? persisted.video : 'https://example.invalid/revised.mp4',
+        cover: 'https://example.invalid/video-default-cover.jpg' };
+    } else {
+      persisted = { ...composer, cover: savedCover === 'unchanged'
+        ? persisted.cover : savedCover === 'different' ? 'https://example.invalid/other-cover.jpg'
+          : 'https://cdn.example.invalid/selected-cover.jpg?saved=1' };
+    }
+    location.href = 'https://creator.xiaohongshu.com/publish/editSuccess';
+  } });
+  const all = [title, body, preview, videoInput, coverInput, complete, dialog, entry, host];
+  const document = {
+    body: { innerText: '' },
+    querySelectorAll(selector) {
+      if (selector.includes('placeholder')) return [title];
+      if (selector.includes('tiptap')) return [body];
+      if (selector === 'input[type="file"]') return [videoInput];
+      if (selector === '.img-container' || selector === '.cover-plugin-preview img') return [];
+      if (selector.startsWith('[data-steward-cover-preview]')) return all;
+      if (selector === '.cover-plugin-preview .default, [class*="cover-preview"]') return [preview];
+      if (selector === '.cover-plugin-preview .cover-edit-entry') return [entry];
+      if (selector.startsWith('[role="dialog"]')) return [dialog];
+      if (selector === 'xhs-publish-btn') return [host];
+      throw new Error(`Unexpected document list selector ${selector}`);
+    },
+    querySelector(selector) {
+      if (selector === 'video') return video;
+      if (selector === '.img-container') return null;
+      if (selector.includes('tiptap')) return body;
+      if (selector.includes('data-steward-video-replacement')) return videoInput;
+      if (selector.startsWith('.cover-plugin-preview .default[style')) return preview;
+      if (selector === 'input[data-rednote-cover-input="true"]') return coverInput.attributes['data-rednote-cover-input'] ? coverInput : null;
+      if (selector === '[data-rednote-cover-dialog="true"]') return dialog.attributes['data-rednote-cover-dialog'] ? dialog : null;
+      throw new Error(`Unexpected document selector ${selector}`);
+    },
+  };
+  const page = {
+    goto: async url => { observed.opens.push(url); location.href = url; composer = { ...persisted }; },
+    evaluate: async source => evaluate(source, { document, location }),
+    fillText: async (selector, value) => { composer[selector.includes('placeholder') ? 'title' : 'body'] = value;
+      return { filled: true, verified: true, actual: value }; },
+    hover: async () => {},
+    setFileInput: async (files, selector) => {
+      const stat = await fs.stat(files[0]);
+      const file = { name: path.basename(files[0]), size: stat.size };
+      if (selector.includes('video-replacement')) {
+        observed.videoUploads++; videoInput.files = [file]; composer.video = 'blob:replacement-video';
+      } else {
+        observed.coverUploads++; coverInput.files = [file];
+        thumbnails = [{ src: 'blob:selected-cover', complete: true, naturalWidth: 100 }];
+      }
+    },
+    wait: async () => { throw new Error('Unexpected pending editor state'); },
+  };
+  return { page, observed };
+}
+
+async function stagedEditFixture(t, options = {}) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-staged-edit-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const video = path.join(dir, 'clip.mp4'), cover = path.join(dir, 'cover.png');
+  await fs.writeFile(video, 'synthetic video'); await fs.writeFile(cover, 'synthetic image');
+  const fixture = stagedVideoEditor(options);
+  return { ...fixture, run: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
+    { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', video, cover, ...extra }) };
+}
+
+test('video and cover save in two stages and verify the same reopened note', async t => {
+  const f = await stagedEditFixture(t);
+  const [result] = await f.run();
+  assert.equal(result.status, 'updated');
+  assert.equal(result.video.duration, null);
+  assert.equal(result.cover.preCoverSource, 'https://example.invalid/video-default-cover.jpg');
+  assert.equal(result.cover.identityVerifiedAfterSave, true);
+  assert.equal(result.cover.bytesCompared, false);
+  assert.equal(f.observed.submissions, 2);
+  assert.equal(f.observed.videoUploads, 1); assert.equal(f.observed.coverUploads, 1);
+  assert.equal(f.observed.coverConfirmations, 1); assert.equal(f.observed.opens.length, 3);
+  assert.ok(f.observed.opens.every(url => url.includes('id=000000000000000000000001')));
+});
+
+for (const savedVideo of ['unchanged', 'empty']) {
+  test(`the cover stage never starts when the first saved video is ${savedVideo}`, async t => {
+    const f = await stagedEditFixture(t, { savedVideo });
+    await assert.rejects(f.run(), /saved video source did not change/);
+    assert.equal(f.observed.submissions, 1); assert.equal(f.observed.videoUploads, 1);
+    assert.equal(f.observed.coverUploads, 0); assert.equal(f.observed.coverConfirmations, 0);
+  });
+}
+
+for (const savedCover of ['unchanged', 'different']) {
+  test(`a changed cover preview cannot verify a saved cover that is ${savedCover}`, async t => {
+    const f = await stagedEditFixture(t, { savedCover });
+    await assert.rejects(f.run(), /readback did not match/);
+    assert.equal(f.observed.submissions, 2); assert.equal(f.observed.videoUploads, 1);
+    assert.equal(f.observed.coverUploads, 1); assert.equal(f.observed.opens.length, 3);
+  });
+}
+
+test('prepare-only leaves the cover stage pending and never submits either stage', async t => {
+  const f = await stagedEditFixture(t);
+  const [result] = await f.run({ 'prepare-only': true });
+  assert.equal(result.status, 'prepared'); assert.equal(result.submitted, false);
+  assert.equal(result.cover, null);
+  assert.equal(result.recovery.coverStage, 'pending-after-video-save');
+  assert.deepEqual(result.recovery.pendingStages, ['cover-and-copy']);
+  assert.equal(f.observed.submissions, 0); assert.equal(f.observed.videoUploads, 1);
+  assert.equal(f.observed.coverUploads, 0); assert.equal(f.observed.opens.length, 1);
+});
+
+for (const throwAtSubmit of [1, 2]) {
+  test(`an unknown stage ${throwAtSubmit} submission never triggers another submit or video upload`, async t => {
+    const f = await stagedEditFixture(t, { throwAtSubmit });
+    await assert.rejects(f.run(), /Submit handler threw after invocation/);
+    assert.equal(f.observed.submissions, throwAtSubmit); assert.equal(f.observed.videoUploads, 1);
+    assert.equal(f.observed.coverUploads, throwAtSubmit - 1);
+  });
+}

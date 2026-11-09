@@ -8,6 +8,9 @@ const file = process.env.FAKE_OPENCLI_STATE;
 let state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { notes: [], writes: 0 };
 const save = () => fs.writeFileSync(file, JSON.stringify(state));
 const output = value => process.stdout.write(`${JSON.stringify(value)}\n`);
+const progress = (phase, detail) => {
+  if (process.env.XHS_OPS_PROGRESS === '1') process.stderr.write(`@@REDNOTE_PROGRESS@@${JSON.stringify({ phase, detail })}\n`);
+};
 if (command === 'steward-account') output([{ logged_in: true, userId: process.env.FAKE_USER_ID ||
   (process.env.FAKE_USER_ID_BY_PROFILE && process.env.OPENCLI_PROFILE === 'second-profile' ? 'demo-user-002' : 'demo-user-001'), username: 'Example creator', identitySource: 'fixture' }]);
 else if (command === 'inventory') output(state.notes.map(note => ({ id: note.noteId, title: note.title })));
@@ -34,16 +37,42 @@ else if (['steward-publish','edit-note'].includes(command)) {
   const id = command === 'edit-note' ? args[2] : state.writes.toString(16).padStart(24, '0');
   const video = args.includes('--video');
   const previous = state.notes.find(note => note.noteId === id);
+  const stagedCover = command === 'edit-note' && video && args.includes('--cover');
   const topics = option('--topics').split(',').filter(Boolean).map((name, i) => ({ id: `topic-${i + 1}`, name }));
   const row = { noteId: id, title: option('--title'), body: command === 'edit-note' ? option('--content') : args[2], topics,
     imageCount: args.includes('--images') ? option('--images').split(',').length : video ? 0 : 1,
     mediaType: video ? 'video' : 'image', videoPresent: video,
     video: video ? (process.env.FAKE_MODE === 'keep-video' ? previous?.video
       : { src: `https://example.invalid/video-${state.writes}.mp4`, duration: 65.13 }) : null,
-    cover: video ? { url: 'https://example.invalid/cover.jpg' } : null,
+    cover: video ? (stagedCover ? { url: `https://example.invalid/auto-cover-${state.writes}.jpg` }
+      : args.includes('--cover')
+      ? { url: `https://example.invalid/cover-${state.writes}.jpg` }
+      : previous?.cover ?? { url: 'https://example.invalid/cover-original.jpg' }) : null,
     verification: { title: true, body: true, nativeTopics: true, imageCount: true } };
   state.notes = [...state.notes.filter(note => note.noteId !== id), row]; save();
-  if (process.env.FAKE_MODE === 'unknown') { process.stderr.write('Connection lost after submission\n'); process.exitCode = 1; }
-  else output([{ status: 'submitted', noteId: id, cover: args.includes('--cover') ? { confirmationClicked: true } : null }]);
+  let preCoverSource = null;
+  if (stagedCover) {
+    preCoverSource = row.cover.url;
+    progress('prepared', { kind: 'edit', noteId: id, stage: 'cover-and-copy', preCoverSource,
+      cover: { previousSource: preCoverSource, selectionPending: true } });
+    if (process.env.FAKE_MODE === 'video-stage-only') {
+      process.stderr.write('Connection lost before custom cover selection\n'); process.exit(1);
+    }
+    const selected = `https://example.invalid/custom-cover-${state.writes}.jpg`;
+    progress('submit_attempted', { kind: 'edit', noteId: id, stage: 'cover-and-copy', cover: {
+      preCoverSource, previousSource: preCoverSource, source: selected, confirmationClicked: true,
+      selectionVerified: true, identityVerifiedAfterSave: false } });
+    state.writes++;
+    if (process.env.FAKE_MODE !== 'keep-cover') row.cover = { url: selected };
+    save();
+  }
+  if (['unknown','unknown-cover','keep-cover'].includes(process.env.FAKE_MODE)) { process.stderr.write('Connection lost after submission\n'); process.exitCode = 1; }
+  else output([{ status: 'submitted', noteId: id, cover: args.includes('--cover') ? {
+    confirmationClicked: true,
+    identityVerifiedAfterSave: true,
+    previousSource: previous?.cover?.url,
+    preCoverSource,
+    source: row.cover?.url,
+  } : null }]);
 } else if (args[0] === 'doctor') output({ ok: true });
 else { process.stderr.write(`Unexpected fixture command: ${command}\n`); process.exitCode = 1; }

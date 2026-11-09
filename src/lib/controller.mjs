@@ -56,8 +56,8 @@ function unchangedNote(before, after) {
   if (before.mediaType === 'video') {
     if (!before.videoPresent || !after.videoPresent || !source(before.video?.src)
       || source(before.video.src) !== source(after.video?.src)
-      || !(before.video?.duration > 0) || !(after.video?.duration > 0)
-      || Math.abs(before.video.duration - after.video.duration) > 0.25) return false;
+      || (before.video?.duration > 0 && after.video?.duration > 0
+        && Math.abs(before.video.duration - after.video.duration) > 0.25)) return false;
   } else if (before.mediaType === 'image') {
     if (before.verification.imageCount !== true || after.verification.imageCount !== true
       || before.imageCount !== after.imageCount || !before.images?.length
@@ -70,6 +70,24 @@ function unchangedNote(before, after) {
     if (!source(before.cover?.url) || source(before.cover.url) !== source(after.cover?.url)) return false;
   }
   return true;
+}
+function stagedPublication(task, events, publication) {
+  const attemptStart = events.findLastIndex(event => event.event === 'execution_claimed'
+    && event.payload?.attemptId === task.attempt_id);
+  const current = task.attempt_id ? (attemptStart < 0 ? [] : events.slice(attemptStart)) : events;
+  const finished = current.findLast(event => event.event === 'adapter_finished'
+    && (!event.payload?.attemptId || event.payload.attemptId === task.attempt_id));
+  publication ??= finished?.payload?.publication ?? null;
+  const coverEvents = current.filter(event => event.event === 'phase'
+    && event.payload?.detail?.stage === 'cover-and-copy'
+    && event.payload.detail.noteId === task.source_note_id
+    && (!task.attempt_id || event.payload.detail.attemptId === task.attempt_id));
+  const prepared = coverEvents.findLast(event => event.payload.phase === 'prepared')?.payload.detail;
+  const attempted = coverEvents.findLast(event => event.payload.phase === 'submit_attempted')?.payload.detail;
+  if (!prepared && !attempted) return publication;
+  return { ...publication, cover: { ...prepared?.cover, ...attempted?.cover, ...publication?.cover,
+    ...(prepared?.preCoverSource ? { preCoverSource: prepared.preCoverSource } : {}),
+    ...(attempted ? { submissionAttempted: true } : {}) } };
 }
 export function compareReadback(task, row, publication = null) {
   const expectedId = task.platform_note_id || task.source_note_id;
@@ -88,13 +106,32 @@ export function compareReadback(task, row, publication = null) {
     && Object.entries(expectedDeclarations).every(([key,value]) => row.declarations.values?.[key] === value);
   const baseline = task.baseline_note;
   if (task.video) {
-    checks.media = row?.mediaType === 'video' && row?.videoPresent === true && row.video?.duration > 0;
+    checks.media = row?.mediaType === 'video' && row?.videoPresent === true && Boolean(row.video?.src);
     if (task.kind === 'edit') {
       checks.videoReplacement = videoSourceChanged(baseline?.video?.src, row?.video?.src);
       const preparedDuration = publication?.replacement?.prepared?.duration;
-      if (preparedDuration > 0) checks.videoDuration = Math.abs(row?.video?.duration - preparedDuration) <= 0.5;
+      if (preparedDuration > 0 && row?.video?.duration > 0) {
+        checks.videoDuration = Math.abs(row.video.duration - preparedDuration) <= 0.5;
+      }
     }
-    if (task.cover) checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+    if (task.cover) {
+      if (task.kind === 'edit') {
+        const staged = publication?.cover || {};
+        const preCoverSource = staged.preCoverSource;
+        const selectedSource = videoSourceIdentity(staged.source);
+        const savedSource = videoSourceIdentity(row?.cover?.url);
+        const coverSourceChanged = videoSourceChanged(preCoverSource, row?.cover?.url)
+          && Boolean(selectedSource && savedSource && selectedSource === savedSource);
+        checks.customCover = Boolean(
+          staged.confirmationClicked
+          && (staged.identityVerifiedAfterSave === true || staged.submissionAttempted === true)
+          && coverSourceChanged
+          && row?.cover?.url
+        );
+      } else {
+        checks.customCover = Boolean(publication?.cover?.confirmationClicked && row?.cover?.url);
+      }
+    }
   } else if (task.images.length) {
     checks.media = row?.mediaType === 'image' && row?.verification?.imageCount === true && row.imageCount === task.images.length;
   } else if (baseline?.mediaType === 'video') {
@@ -108,7 +145,9 @@ export function compareReadback(task, row, publication = null) {
     limits: { mediaBytes: 'not-compared', imageOrder: 'platform-urls-only',
       videoReplacement: task.kind === 'edit' && task.video
         ? (checks.videoReplacement ? 'saved-source-changed; bytes-not-compared' : 'unconfirmed') : 'not-requested',
-      customCover: task.cover ? (checks.customCover ? 'selection-confirmed-and-cover-present' : 'not-confirmed') : 'not-requested',
+      customCover: task.cover ? (checks.customCover
+        ? task.kind === 'edit' ? 'selected-source-saved; bytes-not-compared' : 'selection-confirmed-and-cover-present'
+        : 'not-confirmed') : 'not-requested',
       declarations: expectedDeclarations ? (checks.declarations ? 'saved-composer-controls-match' : 'saved fields unconfirmed') : 'not-requested',
       publicVisibility: 'not-evaluated', moderation: 'not-evaluated' },
   };
@@ -389,7 +428,8 @@ export class Controller {
     const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
     const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Note readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
-    const state = verification.matched ? 'verified' : 'submitted';
+    const state = verification.matched ? 'verified'
+      : task.kind === 'edit' && task.video && task.cover ? 'needs_review' : 'submitted';
     const error = verification.matched ? null : 'Submission located; some requested fields still need review';
     if (reservation) {
       this.withDatabase(db => transaction(db, () => {
@@ -490,7 +530,7 @@ export class Controller {
       const response = await runOpencli(args, { profile: account.profile, timeoutMs: task.video ? 1_200_000 : 300_000,
         onSpawn: pid => this.withDatabase(db => db.prepare('UPDATE tasks SET adapter_pid=? WHERE id=?').run(pid, id)),
         onProgress: event => {
-          if (event?.phase) this.phase(id, event.phase, event.detail);
+          if (event?.phase) this.phase(id, event.phase, { ...event.detail, attemptId: task.attempt_id });
         },
       });
       this.withDatabase(db => db.prepare('UPDATE tasks SET adapter_pid=NULL WHERE id=?').run(id));
@@ -498,7 +538,8 @@ export class Controller {
       privateDirectory(path.join(this.root, 'receipts'));
       const receipt = path.join(this.root, 'receipts', `${id}-${task.attempts}.json`);
       await fs.writeFile(receipt, `${JSON.stringify({ taskId: id, createdAt: now(), response }, null, 2)}\n`, { mode: 0o600 });
-      this.withDatabase(db => addEvent(db, id, 'adapter_finished', { receipt, exitCode: response.exitCode, timedOut: response.timedOut, publication }));
+      this.withDatabase(db => addEvent(db, id, 'adapter_finished', { receipt, exitCode: response.exitCode, timedOut: response.timedOut, publication,
+        attemptId: task.attempt_id }));
       if (response.exitCode !== 0) throw adapterError(response, `Adapter exited ${response.exitCode}`);
       if (prepareOnly) {
         if (publication?.status !== 'prepared' || publication?.submitted !== false) throw new Error('Adapter did not confirm a prepared-only composer');
@@ -511,6 +552,7 @@ export class Controller {
       await verifiedIdentity(account);
       const noteId = task.kind === 'edit' ? task.source_note_id : await this.findPublished(task, publication);
       if (!noteId) throw new Error('Submission returned but no unique platform note was located');
+      publication = stagedPublication(task, this.show(id).events, publication);
       return { ...await this.completeReadback(task, noteId, publication), receipt };
     } catch (error) {
       if (!writeStarted && ['state_owner_conflict','account_write_unresolved'].includes(error.code)) {
@@ -580,7 +622,7 @@ export class Controller {
     }
     await verifiedIdentity(account);
     if (noteId) checkNoteId(noteId);
-    const publication = [...events].reverse().find(event => event.event === 'adapter_finished')?.payload?.publication ?? null;
+    const publication = stagedPublication(task, events);
     if (task.kind === 'edit') {
       if (noteId && noteId !== task.source_note_id) throw new Error('Reconcile an edit using its original note ID');
       if (absent) {
@@ -635,15 +677,20 @@ export class Controller {
     return { ok: false, taskId: id, state: 'needs_review', message: 'No matching note observed; inspect the account and active composer before retrying' };
   }
   handoff(id) {
-    const { task } = this.show(id);
+    const { task, events } = this.show(id);
+    const publication = stagedPublication(task, events);
+    const stagedCover = task.kind === 'edit' && task.video && task.cover && publication?.cover?.preCoverSource;
     return { ok: true, taskId: id, fingerprint: task.fingerprint, revision: reviewRevision(task),
       account: task.account, accountUserId: task.account_user_id, browserProfile: task.browser_profile,
       title: task.title, body: task.body, topics: task.topics, images: task.images,
       video: task.video, cover: task.cover, phase: task.phase, phaseAt: task.phase_at,
       status: task.state, submitted: task.platform_note_id ? true : task.write_started_at ? null : false,
       evidence: { platformNoteId: task.platform_note_id, verification: task.verification,
-        phase: task.phase, source: 'local-task', composerReuse: 'requires-live-inspection' },
-      next: `After completing this exact package manually, link its note ID with xhs-ops link-existing ${id} --note-id NOTE_ID --reason TEXT.` };
+        phase: task.phase, source: 'local-task', composerReuse: 'requires-live-inspection',
+        ...(publication?.cover ? { coverStage: publication.cover } : {}) },
+      next: stagedCover
+        ? `The replacement video was saved. Inspect and complete only the cover on this same note; keep the saved video. Read back with xhs-ops reconcile ${id}. Without recorded selected-cover source evidence, the cover remains needs_review.`
+        : `After completing this exact package manually, link its note ID with xhs-ops link-existing ${id} --note-id NOTE_ID --reason TEXT.` };
   }
   async linkExisting(id, { noteId, reason } = {}) {
     checkNoteId(noteId);
@@ -665,7 +712,7 @@ export class Controller {
     }));
     try {
     await verifiedIdentity(account);
-    const publication = [...events].reverse().find(event => event.event === 'adapter_finished')?.payload?.publication ?? null;
+    const publication = stagedPublication(task, events);
     const noteType = task.video || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
     const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Manual publication readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);

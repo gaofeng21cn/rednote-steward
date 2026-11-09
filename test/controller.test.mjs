@@ -133,13 +133,35 @@ test('plain topic text and missing custom-cover confirmation never produce verif
   const row={noteId:task.platform_note_id,title:task.title,body:task.body,topics:['城市漫步'],imageCount:1,mediaType:'image',verification:{title:true,body:true,nativeTopics:true,imageCount:true}};
   assert.equal(compareReadback(task,row).matched,false);
   const videoTask={...task,kind:'publish',images:[],video:{path:'clip.mp4'},cover:{path:'cover.png'}};
-  const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,video:{duration:65.13},cover:{url:'https://example.invalid/cover'}};
+  const videoRow={...row,topics:[{id:'topic-1',name:'城市漫步'}],mediaType:'video',videoPresent:true,video:{src:'https://example.invalid/video.mp4',duration:65.13},cover:{url:'https://example.invalid/cover'}};
   assert.equal(compareReadback(videoTask,videoRow).matched,false);
   assert.equal(compareReadback(videoTask,videoRow,{cover:{confirmationClicked:true}}).matched,true);
   const declaredTask = { ...videoTask, declarations: { original: true, aiGenerated: false } };
   assert.equal(compareReadback(declaredTask,videoRow,{cover:{confirmationClicked:true}}).matched,false);
   const saved = { ...videoRow, declarations: { values: { original: true, aiGenerated: false }, verification: 'saved-composer-controls' } };
   assert.equal(compareReadback(declaredTask,saved,{cover:{confirmationClicked:true}}).matched,true);
+  const editTask = { ...videoTask, kind: 'edit', source_note_id: task.platform_note_id,
+    baseline_note: { ...videoRow, video: { src: 'https://example.invalid/old-video.mp4', duration: 65.13 },
+      cover: { url: 'https://example.invalid/old-cover.jpg' } } };
+  assert.equal(compareReadback(editTask, { ...videoRow, cover: { url: 'https://example.invalid/old-cover.jpg' } }, {
+    cover: { confirmationClicked: true, identityVerifiedAfterSave: true },
+  }).matched, false);
+  assert.equal(compareReadback(editTask, { ...videoRow, cover: { url: 'https://example.invalid/new-cover.jpg' } }, {
+    cover: { confirmationClicked: true, identityVerifiedAfterSave: true,
+      preCoverSource: 'https://example.invalid/auto-cover.jpg', source: 'https://example.invalid/new-cover.jpg' },
+  }).matched, true);
+  assert.equal(compareReadback(editTask, { ...videoRow, video: { ...videoRow.video, duration: null },
+    cover: { url: 'https://example.invalid/new-cover.jpg' } }, {
+    cover: { confirmationClicked: true, identityVerifiedAfterSave: true,
+      preCoverSource: 'https://example.invalid/auto-cover.jpg', source: 'https://example.invalid/new-cover.jpg' },
+  }).matched, true);
+  const confirmedPreview = { cover: { confirmationClicked: true, identityVerifiedAfterSave: true,
+    preCoverSource: 'https://example.invalid/auto-cover.jpg', source: 'https://example.invalid/selected.jpg' } };
+  assert.equal(compareReadback(editTask, { ...videoRow, cover: { url: 'https://example.invalid/auto-cover.jpg' } }, confirmedPreview).checks.customCover, false);
+  assert.equal(compareReadback(editTask, { ...videoRow, cover: { url: 'https://example.invalid/another-auto.jpg' } }, confirmedPreview).checks.customCover, false);
+  assert.equal(compareReadback(editTask, { ...videoRow, cover: { url: 'https://example.invalid/selected.jpg' } }, {
+    cover: { ...confirmedPreview.cover, source: 'blob:selected' },
+  }).checks.customCover, false);
 });
 
 test('video with a custom cover flows through publication and explicit field verification',async t=>{
@@ -161,6 +183,7 @@ async function videoEdit(t, { cover = false, imageTarget = false } = {}) {
   const original = { noteId, title: 'Previous edition', body: 'Original caption', topics: [],
     imageCount: imageTarget ? 1 : 0, mediaType: imageTarget ? 'image' : 'video', videoPresent: !imageTarget,
     video: imageTarget ? null : { src: 'https://example.invalid/previous.mp4', duration: 65.13 },
+    cover: imageTarget ? null : { url: 'https://example.invalid/cover-original.jpg' },
     verification: { title: true, body: true, nativeTopics: true, imageCount: true } };
   await fs.writeFile(f.env.FAKE_OPENCLI_STATE, JSON.stringify({ notes: [original], writes: 0 }));
   const dir = await f.content('Revised video', { kind: 'edit', sourceNoteId: noteId,
@@ -181,7 +204,59 @@ test('video replacement and cover keep the same note ID with changed saved media
   assert.equal(result.json.verification.limits.mediaBytes, 'not-compared');
   const state = await platform(f.env);
   assert.equal(state.notes.length, 1);
-  assert.equal(state.writes, 1);
+  assert.equal(state.writes, 2);
+});
+
+test('a lost cover-stage response reconciles only the selected saved source without resubmitting', async t => {
+  const f = await videoEdit(t, { cover: true });
+  const unknown = await command(['run', f.id], { ...f.env, FAKE_MODE: 'unknown-cover' });
+  assert.equal(unknown.json.state, 'needs_review');
+  const show = (await command(['show', f.id], f.env)).json;
+  const attempted = show.events.findLast(event => event.event === 'phase' && event.payload.detail?.stage === 'cover-and-copy'
+    && event.payload.phase === 'submit_attempted');
+  assert.equal(attempted.payload.detail.attemptId, show.task.attempt_id);
+  assert.equal(attempted.payload.detail.cover.identityVerifiedAfterSave, false);
+  const restored = await command(['reconcile', f.id], f.env);
+  assert.equal(restored.json.state, 'verified', JSON.stringify(restored));
+  assert.equal(restored.json.verification.limits.customCover, 'selected-source-saved; bytes-not-compared');
+  assert.equal((await platform(f.env)).writes, 2);
+});
+
+test('a video-stage auto cover or an unsaved selected cover remains unresolved', async t => {
+  for (const mode of ['video-stage-only', 'keep-cover']) {
+    const f = await videoEdit(t, { cover: true });
+    const interrupted = await command(['run', f.id], { ...f.env, FAKE_MODE: mode });
+    assert.equal(interrupted.json.state, 'needs_review');
+    const writes = (await platform(f.env)).writes;
+    const handoff = (await command(['handoff', f.id], f.env)).json;
+    assert.match(handoff.next, /only the cover/);
+    assert.match(handoff.next, /keep the saved video/);
+    const restored = await command(['reconcile', f.id], f.env);
+    assert.equal(restored.json.state, 'needs_review', JSON.stringify(restored));
+    assert.equal(restored.json.verification.checks.customCover, false);
+    assert.equal((await platform(f.env)).writes, writes);
+    const rerun = await command(['run', f.id], f.env);
+    assert.match(rerun.stderr, /only queued tasks/);
+    assert.equal((await platform(f.env)).writes, writes);
+  }
+});
+
+test('cover evidence from an older attempt cannot verify a partial current attempt', async t => {
+  const f = await videoEdit(t, { cover: true });
+  await command(['run', f.id], { ...f.env, FAKE_MODE: 'unknown-cover' });
+  const db = openDatabase(path.join(f.env.XHS_OPS_HOME, 'xhs-ops.sqlite'));
+  const task = db.prepare('SELECT attempt_id FROM tasks WHERE id=?').get(f.id);
+  const old = db.prepare("SELECT payload_json FROM events WHERE task_id=? AND event='phase' ORDER BY id DESC LIMIT 1").get(f.id);
+  db.prepare("UPDATE tasks SET attempt_id='attempt_current' WHERE id=?").run(f.id);
+  db.prepare("INSERT INTO events(task_id,event,payload_json,created_at) VALUES(?,?,?,?)")
+    .run(f.id, 'execution_claimed', JSON.stringify({ attemptId: 'attempt_current', previousAttempt: { attemptId: task.attempt_id } }), new Date().toISOString());
+  db.prepare("INSERT INTO events(task_id,event,payload_json,created_at) VALUES(?,?,?,?)")
+    .run(f.id, 'phase', old.payload_json, new Date().toISOString());
+  db.close();
+  const restored = await command(['reconcile', f.id], f.env);
+  assert.equal(restored.json.state, 'needs_review', JSON.stringify(restored));
+  assert.equal(restored.json.verification.checks.customCover, false);
+  assert.equal((await platform(f.env)).writes, 2);
 });
 
 test('a timed-out video replacement reconciles the saved note without resubmitting', async t => {

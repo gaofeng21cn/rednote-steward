@@ -213,7 +213,15 @@ async function readEditor(page) {
             duration: Number.isFinite(element.duration) ? element.duration : null };
         })(),
         cover: (() => {
-          const element = document.querySelector('[class*="cover"] img');
+          const preview = document.querySelector(
+            '.cover-plugin-preview .default[style*="background-image"], ' +
+            '.cover-plugin-preview [style*="background-image"]'
+          );
+          const match = String(preview?.style?.backgroundImage || '')
+            .match(/^url\\(["']?(.*?)["']?\\)$/);
+          if (match?.[1]) return { url: match[1] };
+          const element = Array.from(document.querySelectorAll('.cover-plugin-preview img'))
+            .find(img => !String(img.src || '').startsWith('data:'));
           return element ? { url: String(element.currentSrc || element.src || '') } : null;
         })(),
       };
@@ -467,9 +475,8 @@ async function replaceVideo(page, video, timeoutMs = 600000) {
       const text = String(await page.evaluate('document.body.innerText'));
       return Boolean(
         state?.videoPresent &&
-        state.video?.duration > 0 &&
-        !/上传中|视频处理中/.test(text) &&
-        state.video?.src !== before.video?.src,
+        state.video?.src !== before.video?.src &&
+        !/上传失败|上传错误|处理失败|处理错误/.test(text),
       );
     },
     timeoutMs,

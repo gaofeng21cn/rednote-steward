@@ -52,6 +52,13 @@ or `--note-type video`. Check that the saved video resource changed; the same ti
 or duration alone cannot establish a replacement. Preserve the active composer and reconcile
 an interrupted attempt before uploading again.
 
+When replacing both video and cover, the creator editor uses two saves: video and
+copy first, then the custom cover after reopening the same note. Each stage submits
+once. Read the saved stage evidence before recovery; an already-saved video must
+not be uploaded again to finish its cover. `prepare-only` leaves the cover stage
+pending. Final cover readback compares the saved resource with the selected cover
+and the saved cover before that stage; platform-transformed bytes remain untested.
+
 Metrics collection appends observations. Keep capture time, account, note and content version visible, and distinguish missing values from zero. Window changes are observations, not causal proof or instructions to rewrite.
 
 Run inspections within the user's requested scope. Configure recurring work only when the user asks for a schedule; on-demand medical publication remains on-demand. Keep technical checks and task records out of public captions. Operational command examples are in the project's `docs/operations.md`; do not copy private account records into the public repository or diagnostics.
