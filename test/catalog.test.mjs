@@ -38,9 +38,12 @@ test('series distinguish platform episodes from missing and prepared tasks',t=>{
   importInventory(db,{account:'medical',accountUserId:'demo',notes:[{id:first,title:'第一集'}]});
   updateCatalogNote(db,{accountUserId:'demo',noteId:first,seriesId:'demo-series',episode:'E01',maintenanceStatus:'keep'});
   upsertSeries(db,{account:'medical',accountUserId:'demo',seriesId:'demo-series',title:'示例系列',expectedEpisodes:['E01','E02','E03']});
+  db.prepare(`INSERT INTO tasks (id,fingerprint,kind,account,account_user_id,title,body,topics_json,images_json,manifest_path,package_dir,state,series_id,episode,created_at,updated_at)
+    VALUES ('xhs_00000000000000000001','fingerprint','publish','medical','demo','第二集','Body','[]','[]','/synthetic/post.json','/synthetic','queued','demo-series','E02','2026-11-09T00:00:00Z','2026-11-09T00:00:00Z')`).run();
   const result=seriesOverview(db,{accountUserId:'demo'}).series[0];
   assert.deepEqual(result.unpublishedEpisodes,['E02','E03']);
-  assert.deepEqual(result.missingEpisodes,['E02','E03']);
+  assert.deepEqual(result.missingEpisodes,['E03']);
+  assert.equal(result.tasks[0].state,'queued');
   assert.equal(result.notes[0].note_id,first);
 });
 test('incremental inspection uses timestamp plus boundary IDs and keeps original decisions',t=>{

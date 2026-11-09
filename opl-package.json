@@ -3,7 +3,7 @@
   "package_id": "rednote-steward",
   "display_name": "RedNote Steward",
   "publisher": "gaofeng21cn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "source": "first_party_repo_local",
   "source_repo": "https://github.com/gaofeng21cn/rednote-steward.git",
   "package_role": "capability_package",
@@ -76,6 +76,36 @@
         },
         "data_ref": "rednote.steward.v1#media",
         "command_ids": []
+      },
+      {
+        "view_id": "rednote.steward.catalog",
+        "view_type": "list_detail",
+        "title_i18n": {
+          "en-US": "Account assets",
+          "zh-CN": "账号资产"
+        },
+        "data_ref": "rednote.steward.v1#catalog",
+        "command_ids": []
+      },
+      {
+        "view_id": "rednote.steward.history",
+        "view_type": "list_detail",
+        "title_i18n": {
+          "en-US": "Metric history",
+          "zh-CN": "指标历史"
+        },
+        "data_ref": "rednote.steward.v1#history",
+        "command_ids": []
+      },
+      {
+        "view_id": "rednote.steward.recovery",
+        "view_type": "list_detail",
+        "title_i18n": {
+          "en-US": "Recovery queue",
+          "zh-CN": "恢复队列"
+        },
+        "data_ref": "rednote.steward.v1#recovery",
+        "command_ids": []
       }
     ],
     "commands": [],
@@ -107,6 +137,33 @@
         "scope": "root",
         "sort_order": 802,
         "view_id": "rednote.steward.media"
+      },
+      {
+        "contribution_id": "rednote.steward.catalog",
+        "slot": "settings.section",
+        "contribution_kind": "view",
+        "trust_tier": "declarative",
+        "scope": "root",
+        "sort_order": 803,
+        "view_id": "rednote.steward.catalog"
+      },
+      {
+        "contribution_id": "rednote.steward.history",
+        "slot": "settings.section",
+        "contribution_kind": "view",
+        "trust_tier": "declarative",
+        "scope": "root",
+        "sort_order": 804,
+        "view_id": "rednote.steward.history"
+      },
+      {
+        "contribution_id": "rednote.steward.recovery",
+        "slot": "settings.section",
+        "contribution_kind": "view",
+        "trust_tier": "declarative",
+        "scope": "root",
+        "sort_order": 805,
+        "view_id": "rednote.steward.recovery"
       }
     ]
   },
@@ -115,24 +172,51 @@
     "canonicalization": "ordered_path_length_file_length_bytes",
     "paths": [
       ".codex-plugin/plugin.json",
-      "plugin.json",
+      "adapters/opencli/xiaohongshu/cover-editor.mjs",
+      "adapters/opencli/xiaohongshu/declarations.mjs",
+      "adapters/opencli/xiaohongshu/edit-note.js",
+      "adapters/opencli/xiaohongshu/editor-helpers.mjs",
+      "adapters/opencli/xiaohongshu/inventory.js",
+      "adapters/opencli/xiaohongshu/page-check.mjs",
+      "adapters/opencli/xiaohongshu/steward-account.js",
+      "adapters/opencli/xiaohongshu/steward-publish.js",
+      "adapters/opencli/xiaohongshu/steward-read-note.js",
+      "adapters/opencli/xiaohongshu/topic-probe.js",
       "app-contribution-adapter.json",
+      "plugin.json",
+      "scripts/check-package.mjs",
+      "scripts/install-local.mjs",
+      "scripts/lib/npm-pack-output.mjs",
+      "scripts/package-lock.mjs",
+      "scripts/package-release.mjs",
+      "scripts/release-manifest.mjs",
+      "scripts/uninstall.mjs",
+      "scripts/uninstall.sh",
+      "skills/rednote-steward/SKILL.md",
       "src/app-contribution.mjs",
       "src/cli.mjs",
       "src/lib/audit.mjs",
+      "src/lib/backup.mjs",
+      "src/lib/build.mjs",
+      "src/lib/catalog.mjs",
       "src/lib/config.mjs",
       "src/lib/controller.mjs",
       "src/lib/db.mjs",
+      "src/lib/health.mjs",
+      "src/lib/lineage.mjs",
       "src/lib/media.mjs",
+      "src/lib/migration.mjs",
       "src/lib/opencli.mjs",
+      "src/lib/owner.mjs",
       "src/lib/package.mjs",
+      "src/lib/progress.mjs",
+      "src/lib/qualification.mjs",
       "src/lib/review.mjs",
       "src/lib/workspace.mjs",
       "src/mcp.mjs",
       "src/opencli-runner.mjs",
-      "src/setup.mjs",
-      "skills/rednote-steward/SKILL.md"
+      "src/setup.mjs"
     ],
-    "digest": "sha256:edc3778bc297a1c0d33ff140592181d7297c3104b8a82d962186355ea4375d95"
+    "digest": "sha256:0abb5e919e6c4733a21236388b77c4655adafd266eaaa44c29a8cb7532fc7976"
   }
 }

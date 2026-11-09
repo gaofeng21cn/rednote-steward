@@ -10,9 +10,10 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { emitProgress } from '../../../src/lib/progress.mjs';
+import { assertCreatorLocation } from './page-check.mjs';
 import {
   ArgumentError,
-  AuthRequiredError,
   CommandExecutionError,
   TimeoutError,
 } from '@jackwener/opencli/errors';
@@ -149,9 +150,7 @@ async function openEditor(page, noteId, noteType = 'normal') {
   await page.goto(editUrl(noteId, noteType));
   await waitForEditor(page);
   const currentUrl = String(await page.evaluate('location.href'));
-  if (!currentUrl.includes('creator.xiaohongshu.com') || /login|passport/i.test(currentUrl)) {
-    throw new AuthRequiredError('creator.xiaohongshu.com');
-  }
+  assertCreatorLocation(currentUrl);
   if (!currentUrl.includes(noteId)) {
     throw new CommandExecutionError(
       `The creator center did not open note ${noteId}`,
@@ -341,6 +340,7 @@ async function replaceImages(page, images) {
   await page.wait({ time: 0.5 });
 
   for (const [index, filePath] of images.entries()) {
+    emitProgress('uploading', { mediaType: 'image', index: index + 1, total: images.length });
     const bytes = fs.readFileSync(filePath);
     const encoded = {
       name: path.basename(filePath),
@@ -393,6 +393,7 @@ async function replaceImages(page, images) {
         `Image upload did not attach ${path.basename(filePath)}: ${upload?.error ?? 'unknown error'}`,
       );
     }
+    emitProgress('processing', { mediaType: 'image', index: index + 1, total: images.length });
     await waitFor(
       page,
       async () =>
@@ -448,7 +449,9 @@ async function replaceVideo(page, video, timeoutMs = 600000) {
   }
   // Exactly one upload attempt. If the bridge loses the result after the
   // file reaches the platform, the controller retains the task as unknown.
+  emitProgress('uploading', { mediaType: 'video', replacement: true });
   await page.setFileInput([video], videoInput);
+  emitProgress('processing', { mediaType: 'video', replacement: true });
   const selectedFile = await page.evaluate(`(selector => {
     const input = document.querySelector(selector);
     const file = input?.files?.[0];

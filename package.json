@@ -1,6 +1,6 @@
 {
   "name": "rednote-steward",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local publishing and account operations for Xiaohongshu, with a shared CLI and MCP server.",
   "type": "module",
   "license": "Apache-2.0",
@@ -35,13 +35,17 @@
     "opl-package.json",
     "app-contribution-adapter.json",
     "plugin.json",
-    ".codex-plugin/"
+    ".codex-plugin/",
+    "release-manifest.json"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "check:package": "node scripts/check-package.mjs",
     "mcp": "node src/mcp.mjs",
-    "lock:package": "node scripts/package-lock.mjs --write"
+    "lock:package": "node scripts/package-lock.mjs --write",
+    "manifest": "node scripts/release-manifest.mjs",
+    "check:manifest": "node scripts/release-manifest.mjs --check",
+    "pack:release": "node scripts/package-release.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

@@ -21,7 +21,7 @@ async function call(file, args, env, stdin = '') {
 async function fixture(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-review-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
-  const env = { ...process.env, XHS_OPS_HOME: path.join(dir, 'state'),
+  const env = { ...process.env, XHS_OPS_HOME: path.join(dir, 'state'), XHS_OPS_OWNER_HOME: path.join(dir, 'owners'),
     XHS_OPS_OPENCLI_BIN: path.join(root, 'test/fixtures/fake-opencli.mjs'), FAKE_OPENCLI_STATE: path.join(dir, 'platform.json') };
   const cli = args => call('src/cli.mjs', args, env);
   const read = (ref = 'tasks', input = {}, operation = 'read') => call('src/app-contribution.mjs', [], env,
@@ -41,6 +41,11 @@ test('review discovery is read-only on a fresh install and rejects execute', asy
   await assert.rejects(fs.stat(f.env.XHS_OPS_HOME), { code: 'ENOENT' });
   assert.equal((await f.read('review')).json.result.state, 'input_required');
   assert.equal((await f.read('tasks', {}, 'execute')).json.ok, false);
+  assert.deepEqual((await f.read('catalog')).json.result.data.items, []);
+  assert.deepEqual((await f.read('history', { account: 'demo' })).json.result.data.items, []);
+  assert.deepEqual((await f.read('recovery')).json.result.data.items, []);
+  assert.equal((await f.read('catalog', { limit: 0 })).json.ok, false);
+  await assert.rejects(fs.stat(f.env.XHS_OPS_HOME), { code: 'ENOENT' });
 });
 
 test('CLI and contribution share exact content, media refs and conditional authorization', async t => {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Install a released source snapshot and its locked dependencies into user space.
-version="v0.1.0"
+version="v0.2.0"
 source_dir=""
 skip_browser=0
 skip_integrations=0
@@ -16,7 +16,7 @@ while [ "$#" -gt 0 ]; do
     --skip-browser-setup) skip_browser=1; shift ;;
     --skip-integrations) skip_integrations=1; shift ;;
     --help|-h)
-      printf '%s\n' 'Usage: install.sh [--version v0.1.0] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
+      printf '%s\n' 'Usage: install.sh [--version v0.2.0] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
         'XHS_OPS_INSTALL_ROOT chooses the application directory; XHS_OPS_BIN_DIR chooses the command directory.'
       exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
@@ -25,7 +25,7 @@ done
 
 case "$version" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) printf 'Use a release tag such as v0.1.0: %s\n' "$version" >&2; exit 2 ;;
+  *) printf 'Use a release tag such as v0.2.0: %s\n' "$version" >&2; exit 2 ;;
 esac
 case "$version" in *[!a-zA-Z0-9._-]*) printf 'Invalid release tag\n' >&2; exit 2 ;; esac
 
@@ -52,20 +52,52 @@ if [ -n "$source_dir" ]; then
   "$node_bin" --input-type=module - "$source_dir" "$stage/source" <<'NODE'
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 const [from, to] = process.argv.slice(2);
-const entries = ['package.json', 'package-lock.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin'];
+const entries = ['package.json', 'package-lock.json', 'release-manifest.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin'];
 for (const name of entries) {
   try { await fs.cp(path.join(from, name), path.join(to, name), { recursive: true }); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+// Local source installation keeps its exact revision and dirty state. Release
+// artifacts already carry the immutable manifest generated from their commit.
+try { await fs.access(path.join(to, 'release-manifest.json')); }
+catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+  const { createReleaseManifest } = await import(pathToFileURL(path.join(from, 'src/lib/build.mjs')).href);
+  const manifest = await createReleaseManifest(from);
+  await fs.writeFile(path.join(to, 'release-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 }
 NODE
 else
   command -v curl >/dev/null 2>&1 || { printf '%s\n' 'curl is required.' >&2; exit 1; }
   printf 'Downloading RedNote Steward %s...\n' "$version"
-  curl --fail --silent --show-error --location \
-    "https://codeload.github.com/gaofeng21cn/rednote-steward/tar.gz/refs/tags/$version" -o "$stage/release.tar.gz"
+  if [ "$version" = 'v0.1.0' ]; then
+    # The original release predates immutable installation manifests.
+    curl --fail --silent --show-error --location \
+      "https://codeload.github.com/gaofeng21cn/rednote-steward/tar.gz/refs/tags/$version" -o "$stage/release.tar.gz"
+  else
+    release_url="https://github.com/gaofeng21cn/rednote-steward/releases/download/$version"
+    release_name="rednote-steward-$version.tar.gz"
+    curl --fail --silent --show-error --location "$release_url/$release_name" -o "$stage/release.tar.gz"
+    curl --fail --silent --show-error --location "$release_url/SHA256SUMS" -o "$stage/SHA256SUMS"
+    "$node_bin" --input-type=module - "$stage/release.tar.gz" "$stage/SHA256SUMS" "$release_name" <<'NODE'
+import fs from 'node:fs';
+import { createHash } from 'node:crypto';
+const [archive, sums, expectedName] = process.argv.slice(2);
+const lines = fs.readFileSync(sums, 'utf8').trim().split(/\r?\n/);
+const matching = lines.map(line => /^([a-f0-9]{64})  (.+)$/.exec(line)).filter(row => row && row[2] === expectedName);
+if (matching.length !== 1 || createHash('sha256').update(fs.readFileSync(archive)).digest('hex') !== matching[0][1]) {
+  throw new Error('Release archive checksum does not match the selected version');
+}
+NODE
+  fi
   mkdir -p "$stage/source"
   tar -xzf "$stage/release.tar.gz" --strip-components=1 -C "$stage/source"
+  if [ "$version" != 'v0.1.0' ] && [ ! -f "$stage/source/release-manifest.json" ]; then
+    printf '%s\n' 'The selected release has no installation manifest.' >&2
+    exit 1
+  fi
 fi
 
 printf '%s\n' 'Installing locked dependencies...'

@@ -2,13 +2,17 @@
 
 RedNote Steward runs locally on macOS with Node.js 24+ and Google Chrome. Its packaged OpenCLI dependency is pinned to 1.8.5; Browser Bridge is pinned to 1.0.26. An existing compatible browser connection can be reused.
 
+The application uses its packaged OpenCLI registry and adapters. It leaves an independently installed OpenCLI and `~/.opencli` commands in place. CLI, daemon and extension versions are separate; doctor shows the observed combination so a newer global CLI is not mistaken for the bundled runtime. A dependency upgrade is qualified per operation before it replaces the pinned combination.
+
 ## Install from GitHub
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh | bash
 ```
 
-The script installs the default release, currently `v0.1.0`, into your user directory. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
+The script installs the default release, `v0.2.0`, into your user directory. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
+
+Versioned installs download the release asset and its `SHA256SUMS`, then check the archive and package's `release-manifest.json` before selecting it. The manifest records the source revision and digest of public installation inputs. A local `--source` install generates the same manifest with its actual revision and dirty state. Explicit installation of the original `v0.1.0` retains its older source-archive route.
 
 The installed commands are:
 
@@ -32,11 +36,13 @@ xhs-ops account probe --profile YOUR_PROFILE
 
 ```bash
 xhs-ops account add personal --user-id YOUR_USER_ID --profile YOUR_PROFILE
-xhs-ops doctor --account personal
+xhs-ops doctor --account personal --json
 xhs-ops inventory --account personal --limit 20
 ```
 
 Aliases are local names such as `personal` or `education`. The stable user ID determines account identity; the nickname is a display label. Each account uses its own profile. Login and device verification stay with the account holder in Chrome or the mobile app.
+
+Doctor reports the actual package/source revision where available, state root and schema, dependency and bridge information, account identity and capability evidence. A capability that has not been exercised in this environment stays `unknown`; executable or extension files alone do not establish a logged-in publishing session. Use `xhs-ops doctor --redact` when sharing a diagnostic result; it omits private paths, UIDs, profiles and raw errors. Installation verification can use an account probe or inventory read without posting test content.
 
 ## MCP clients
 
@@ -58,9 +64,17 @@ For another MCP client, add a STDIO server using the absolute installed executab
 }
 ```
 
-For a separate data directory, set `XHS_OPS_HOME` in the client environment and use the same value for CLI commands. This makes the client and shell use the same account bindings and task history.
+For a separate data directory, set `XHS_OPS_HOME` in the client environment and use the same value for CLI commands. This makes the client and shell use the same account bindings and task history. The same stable account ID or browser profile can have only one state owner on a machine; choosing another home does not create a second writer for that account.
 
-The server exposes tools for account probing and binding, inventory and note reads, package inspection and ingestion, task authorization and execution, reconciliation, metrics, and inspection candidates. `task_execute` returns a task ID after starting a separate worker; read `task_get` for the outcome. The first release uses STDIO and structured tool results.
+When an account is deliberately moved between state roots, use the exact old home and a reason. The takeover path refuses an unreadable source, unresolved attempt or active lease:
+
+```bash
+xhs-ops account status personal
+xhs-ops account takeover personal --user-id YOUR_USER_ID --profile YOUR_PROFILE \
+  --from-home "$HOME/.local/share/rednote-steward-old" --reason "Transferred after previewing the old owner"
+```
+
+The server exposes tools for account probing and binding, inventory and note reads, package and batch operations, reconciliation and manual-result linking, catalog, metrics history and backups. `task_execute` returns a task ID after starting a separate worker; read `task_get` for launch status, phase and outcome. STDIO and structured tool results remain available when a host has no shared UI. The read-only qualification commands (`qualify`, `compare-qualifications`) compare observed account/backend behavior before a runtime upgrade; they do not publish test content.
 
 ## Where files live
 
@@ -94,7 +108,7 @@ Install a specific published version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh \
-  | bash -s -- --version v0.1.0
+  | bash -s -- --version v0.2.0
 ```
 
 Run the packaged uninstaller to remove managed installation files and integrations:
@@ -109,7 +123,7 @@ Private account state, task history, receipts, and media are retained. `xhs-ops 
 
 Install Steward alongside the original workspace first. Verify the new account binding and platform reads before transferring operational responsibility. Existing databases, JSON ledgers, active browser drafts, and authorization records remain with their current owner until deliberately migrated.
 
-Use one queue for a live account. Before resuming an older task, check its current record and platform note ID in the original system. This release does not automatically import an older database or medical-video ledger. A new installation alone is not a reason to ingest already-published material again.
+Use one queue for a live account. Before resuming an older task, check its current record and platform note ID in the original system. Back up the current state and use a migration/restore preview to check schema, account/task counts, note IDs and media paths before applying a transfer. Restore targets an empty destination; it retains history and clears live process IDs rather than launching queued work. A new installation alone is not a reason to ingest already-published material again. See [account operations](operations.md) for backup and restore commands.
 
 ## Development install
 
@@ -126,3 +140,13 @@ the checkout explicitly with `bash install.sh --source "$PWD"`. The public
 one-command installer continues to select its pinned release tag.
 
 For an isolated installer check, use its `--source PATH`, `--skip-browser-setup`, and `--skip-integrations` options with separate installation, binary, and state directories. Production browser sessions are unnecessary for this check.
+
+## Build a versioned release
+
+Start from the committed source with the package lock and tests current, then use an output directory outside the checkout:
+
+```bash
+npm run pack:release -- --out /absolute/path/to/release-output
+```
+
+The command creates the versioned installation archive, release manifest and `SHA256SUMS`. It rejects a dirty source tree or an attempt to replace an existing artifact with different bytes. Upload those exact files to the matching GitHub release. Source tests, archive validation, isolated installation and live account capability qualification are distinct evidence; publishing an archive does not make untested browser operations supported.

@@ -2,6 +2,8 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { CommandExecutionError } from '@jackwener/opencli/errors';
 import { applyCover } from './cover-editor.mjs';
+import { applyDeclarations, validateDeclarations } from './declarations.mjs';
+import { emitProgress } from '../../../src/lib/progress.mjs';
 import { videoSourceChanged } from '../../../src/lib/media.mjs';
 import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, replaceVideo, normalizeForComparison, sameTopics, submitEdit, editUrl, waitFor } from './editor-helpers.mjs';
 
@@ -24,10 +26,13 @@ cli({
     { name: 'images', default: '', help: 'Comma-separated complete image list in display order; empty keeps existing images' },
     { name: 'video', default: '', help: 'Replacement video file; empty keeps existing video' },
     { name: 'cover', default: '', help: 'Custom cover for the replacement video' },
+    { name: 'original', help: 'Explicit original declaration: true or false; omitted leaves the current setting' },
+    { name: 'ai-declaration', help: 'Explicit AI-generated declaration: true or false; omitted leaves the current setting' },
+    { name: 'prepare-only', type: 'bool', default: false, help: 'Prepare the edit without invoking submission' },
     { name: 'upload-timeout', type: 'int', default: 600, help: 'Video upload/processing timeout in seconds' },
     { name: 'dry-run', type: 'bool', default: false, help: 'Open and read the note without changing or submitting it' },
   ],
-  columns: ['status', 'noteId', 'title', 'body', 'topicNodes', 'topics', 'images', 'mediaType', 'videoPresent', 'video', 'cover', 'replacement', 'readback'],
+  columns: ['status', 'noteId', 'title', 'body', 'topicNodes', 'topics', 'images', 'mediaType', 'videoPresent', 'video', 'cover', 'replacement', 'declarations', 'readback', 'submitted', 'snapshot', 'recovery'],
   func: async (page, kwargs) => {
     const noteId = validateNoteId(kwargs['note-id']);
     const title = kwargs['dry-run'] ? String(kwargs.title ?? '').trim() : validateTitle(kwargs.title);
@@ -36,6 +41,8 @@ cli({
     const images = validateImages(kwargs.images);
     const video = validateVideo(kwargs.video);
     const cover = kwargs.cover ? validateImages(kwargs.cover) : [];
+    const desiredDeclarations = validateDeclarations(kwargs);
+    const prepareOnly = kwargs['prepare-only'] === true || kwargs['prepare-only'] === 'true';
     if (cover.length > 1 || (cover.length && !video)) throw new CommandExecutionError('A custom cover requires exactly one replacement video');
     if (video && images.length) throw new CommandExecutionError('Choose replacement video or images, not both');
     const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
@@ -44,6 +51,7 @@ cli({
     }
 
     await openEditor(page, noteId, video ? 'video' : 'normal');
+    emitProgress('selected', { kind: 'edit', noteId });
     const before = await readEditor(page);
     if (!before) throw new CommandExecutionError('The note editor loaded but its fields could not be read');
     if (video && before.mediaType !== 'video') {
@@ -71,6 +79,7 @@ cli({
     await fillBody(page, content);
     await replaceTopics(page, topics);
     await replaceImages(page, images);
+    const declarations = await applyDeclarations(page, desiredDeclarations);
 
     const prepared = await readEditor(page);
     if (!prepared) throw new CommandExecutionError('Could not verify the edited fields before submission');
@@ -93,8 +102,18 @@ cli({
     if (video && (!prepared.videoPresent || !(prepared.video?.duration > 0))) {
       throw new CommandExecutionError('Pre-submit video is absent or not ready');
     }
-
+    emitProgress('prepared', { kind: 'edit', noteId, mediaType: prepared.mediaType,
+      nativeTopicCount: prepared.topics.length, declarations: declarations.observed,
+      composer: { url: prepared.url, observedAt: new Date().toISOString(), persistence: 'not-confirmed' } });
+    if (prepareOnly) return [{ status: 'prepared', submitted: false, noteId, title: prepared.title,
+      body: prepared.body, topics: prepared.topics, mediaType: prepared.mediaType,
+      replacement, cover: coverSelection, declarations, snapshot: prepared,
+      recovery: { composerObserved: true, persistedDraftVerified: false,
+        instruction: 'Inspect this same composer and account before continuing; no submission was invoked.' } }];
+    emitProgress('submit_attempted', { kind: 'edit', noteId });
     const submitMethod = await submitEdit(page);
+    emitProgress('platform_accepted', { kind: 'edit', noteId, confirmation: 'creator-edit-success-page' });
+    emitProgress('readback', { noteId });
     await openEditor(page, noteId, video ? 'video' : 'normal');
     let after = await readEditor(page);
     if (!after) throw new CommandExecutionError('The note editor could not be reopened for readback');
@@ -126,6 +145,7 @@ cli({
       images: String(after.imageCount),
       mediaType: after.mediaType, videoPresent: after.videoPresent, video: after.video,
       cover: coverSelection,
+      declarations,
       replacement: replacement ? { ...replacement, after: after.video,
         savedSourceChanged: videoSourceChanged(before.video?.src, after.video?.src), bytesCompared: false } : null,
       readback: video && !videoSourceChanged(before.video?.src, after.video?.src)

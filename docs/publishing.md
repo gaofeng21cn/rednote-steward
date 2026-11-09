@@ -66,7 +66,32 @@ xhs-ops approve TASK_ID \
   --at 2026-12-01T10:00:00+08:00
 ```
 
-Calling `xhs-ops run` executes the next due queued task. Due times are stored locally; arrange invocation through your chosen scheduler if scheduled execution is wanted. Installation creates no recurring tasks.
+Calling `xhs-ops run` executes the next eligible due task. It skips accounts or profiles held by unresolved attempts; `--account ALIAS` narrows selection. Due times are stored locally; arrange invocation through your chosen scheduler if scheduled execution is wanted. Installation creates no recurring tasks. Batch authorization, execution, pause and cancellation are described in [account operations](operations.md).
+
+## Organization and media provenance
+
+Content packages may carry local organization fields such as `seriesId`, `episode` and `contentType`. They help connect a prepared package to the account catalog. They do not add platform hashtags or create a Xiaohongshu collection.
+
+Record separate originals and derivatives with an optional `mediaLineage` sidecar:
+
+```json
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "source": "original/01.jpg",
+      "derived": "images/01.jpg",
+      "purpose": "exposure-correction",
+      "tool": "local-editor",
+      "parameters": { "exposure": 0.2 }
+    }
+  ]
+}
+```
+
+Set `mediaLineage: "media-lineage.json"` in `post.json`, or supply the entries inline. Source and derivative hashes record the relationship; the final derivative must be selected by `images`, `video` or `cover`. Steward records this lineage and verifies files; it does not alter the media. For sharing-safe maps and documents, select the explicit public derivative as the upload file.
+
+Platform declarations can be supplied as explicit booleans in `declarations`, for example `{ "original": true, "aiGenerated": false }`. A declaration records an intended field; adapter capability and the field result determine whether it was actually applied. Use the facts of the selected content, not a tool default, to choose these values.
 
 ## Edit an existing post
 
@@ -155,9 +180,11 @@ inspected its composer. A missing baseline or a partially changed note remains u
 A `verified` task means the fields required by the verifier matched the available platform readback. A submission with incomplete readback retains its explicit evidence gap. Media counts and presence do not prove that transformed platform files have the same bytes as the local source.
 
 The controller passes its time budget to OpenCLI's browser command timeout, leaving a small
-interval for the subprocess to report its result before the outer deadline. On a timeout,
-reconcile the saved attempt and current composer before resuming; the elapsed time does not
-establish whether the platform accepted the update.
+interval for the subprocess to report its result before the outer deadline. Adapter progress
+is stored with the task where observed. On a timeout, reconcile the saved attempt and current
+composer before resuming; elapsed time and a saved phase do not establish whether the platform
+accepted the update or retained an upload. Use `handoff` for the exact state and `link-existing`
+when a person completed publication. Neither operation submits another post.
 
 ## Maintain an account
 
@@ -167,4 +194,4 @@ xhs-ops audit --account personal --limit 30
 xhs-ops report
 ```
 
-Metrics and inspection candidates help decide what deserves attention. Keep content judgment with the author and assistant: understand what a post was sharing, improve the concrete issue, and preserve a mature series when its content already works. For photographs, retain the original and make requested exposure, white-balance, contrast, or sharpening adjustments as separate derivatives.
+Metrics and inspection candidates help decide what deserves attention. Collection appends observations; `metrics-history` retains the account, note and capture time for comparison. Keep content judgment with the author and assistant: understand what a post was sharing, improve the concrete issue, and preserve a mature series when its content already works. For photographs, retain the original and make requested exposure, white-balance, contrast or light sharpening adjustments as separate derivatives. [Account operations](operations.md) covers the catalog, incremental inspection policy, media lineage, metric history and backups.

@@ -8,11 +8,25 @@ const file = process.env.FAKE_OPENCLI_STATE;
 let state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { notes: [], writes: 0 };
 const save = () => fs.writeFileSync(file, JSON.stringify(state));
 const output = value => process.stdout.write(`${JSON.stringify(value)}\n`);
-if (command === 'steward-account') output([{ logged_in: true, userId: process.env.FAKE_USER_ID || 'demo-user-001', username: 'Example creator', identitySource: 'fixture' }]);
+if (command === 'steward-account') output([{ logged_in: true, userId: process.env.FAKE_USER_ID ||
+  (process.env.FAKE_USER_ID_BY_PROFILE && process.env.OPENCLI_PROFILE === 'second-profile' ? 'demo-user-002' : 'demo-user-001'), username: 'Example creator', identitySource: 'fixture' }]);
 else if (command === 'inventory') output(state.notes.map(note => ({ id: note.noteId, title: note.title })));
-else if (command === 'steward-read-note') output(state.notes.filter(note => note.noteId === args[2]));
+else if (command === 'steward-read-note') {
+  if (process.env.FAKE_READ_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_READ_DELAY)));
+  output(state.notes.filter(note => note.noteId === args[2]));
+}
 else if (command === 'creator-notes-summary') output([{ id: '000000000000000000000001', title: 'Example', views: 500, collects: 2, comments: 7 }]);
 else if (['steward-publish','edit-note'].includes(command)) {
+  if (process.env.FAKE_MODE === 'typed-error') {
+    output({ error: { code: 'selector_drift', message: 'Synthetic publish control changed' } });
+    process.exit(1);
+  }
+  if (process.env.XHS_OPS_PROGRESS === '1') process.stderr.write('@@REDNOTE_PROGRESS@@{"phase":"prepared","detail":{"mediaReady":true}}\n');
+  if (args.includes('--prepare-only')) {
+    output([{ status: 'prepared', submitted: false, snapshot: { title: option('--title') }, recovery: { persistedDraftVerified: false } }]);
+    process.exit(0);
+  }
+  if (process.env.XHS_OPS_PROGRESS === '1') process.stderr.write('@@REDNOTE_PROGRESS@@{"phase":"submit_attempted"}\n');
   if (process.env.FAKE_PUBLISH_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_PUBLISH_DELAY)));
   // Reload after the delay so concurrent writes become visible to the test.
   state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : state;

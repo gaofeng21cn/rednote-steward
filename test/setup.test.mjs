@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { setup } from '../src/setup.mjs';
+import { createReleaseManifest } from '../src/lib/build.mjs';
 
 const exec = promisify(execFile);
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,13 +16,14 @@ async function fixture(t) {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote setup '));
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const sourceRoot = path.join(base, 'source');
-  for (const name of ['src', 'adapters/opencli', 'node_modules/@jackwener/opencli', 'skills/rednote-steward', 'scripts']) {
+  for (const name of ['src/lib', 'adapters/opencli', 'node_modules/@jackwener/opencli', 'skills/rednote-steward', 'scripts']) {
     await fs.mkdir(path.join(sourceRoot, name), { recursive: true });
   }
   await fs.writeFile(path.join(sourceRoot, 'package.json'), JSON.stringify({ name: 'rednote-steward', version: '0.1.0', type: 'module' }));
   await fs.writeFile(path.join(sourceRoot, 'node_modules/@jackwener/opencli/package.json'), '{}');
   await fs.writeFile(path.join(sourceRoot, 'src/opencli-runner.mjs'), '');
   await fs.writeFile(path.join(sourceRoot, 'src/mcp.mjs'), '');
+  await fs.copyFile(path.join(project, 'src/lib/build.mjs'), path.join(sourceRoot, 'src/lib/build.mjs'));
   await fs.writeFile(path.join(sourceRoot, 'skills/rednote-steward/SKILL.md'), 'Generic workflow\n');
   return { base, sourceRoot, stateRoot: path.join(base, 'private state'), codexRoot: path.join(base, 'codex'), installRoot: path.join(base, "app's install $(literal)"), binDir: path.join(base, "command's bin") };
 }
@@ -60,6 +62,10 @@ test('missing Codex returns portable MCP configuration without changing client s
   assert.equal(result.integrations.mcp.status, 'manual');
   assert.equal(result.integrations.mcp.config.mcpServers['rednote-steward'].command, process.execPath);
   await assert.rejects(fs.stat(p.codexRoot), { code: 'ENOENT' });
+  const receipt = JSON.parse(await fs.readFile(path.join(p.stateRoot, 'installation.json'), 'utf8'));
+  assert.equal(receipt.version, '0.1.0');
+  assert.match(receipt.contentDigest, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(receipt.browserBridge.version, '1.0.26');
 });
 
 test('MCP name collision leaves the existing client entry untouched', async (t) => {
@@ -109,4 +115,24 @@ test('a failed upgrade restores the previous application and commands', async (t
   assert.equal(await fs.readlink(path.join(p.installRoot, 'current')), previous);
   const { stdout } = await exec(path.join(p.binDir, 'xhs-ops'), ['help'], { env });
   assert.equal(JSON.parse(stdout).version, 'working');
+});
+
+test('installer verifies manifest bytes before selecting a release and records source identity', async t => {
+  const p = await fixture(t);
+  await fs.writeFile(path.join(p.sourceRoot, 'src/cli.mjs'), `console.log(JSON.stringify({ok:true,version:'working'}));\n`);
+  const manifest = await createReleaseManifest(p.sourceRoot);
+  manifest.sourceRevision = 'b'.repeat(40);
+  manifest.sourceDirty = false;
+  const manifestFile = path.join(p.sourceRoot, 'release-manifest.json');
+  await fs.writeFile(manifestFile, JSON.stringify({ ...manifest, content: { ...manifest.content, digest: 'sha256:' + '0'.repeat(64) } }));
+  const env = { ...process.env, XHS_OPS_HOME: p.stateRoot };
+  const args = [path.join(project, 'scripts/install-local.mjs'), '--source', p.sourceRoot, '--root', p.installRoot, '--bin', p.binDir, '--node', process.execPath];
+  await assert.rejects(exec(process.execPath, args, { env }), /content digest does not match/);
+  await assert.rejects(fs.stat(path.join(p.installRoot, 'current')), { code: 'ENOENT' });
+  await fs.writeFile(manifestFile, JSON.stringify(manifest));
+  await exec(process.execPath, args, { env });
+  const receipt = JSON.parse(await fs.readFile(path.join(p.installRoot, 'install.json'), 'utf8'));
+  assert.equal(receipt.sourceRevision, manifest.sourceRevision);
+  assert.equal(receipt.contentDigest, manifest.content.digest);
+  assert.equal(receipt.sourceDirty, false);
 });

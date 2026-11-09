@@ -40,9 +40,13 @@ The bundled Skill helps an assistant follow these workflows. Your account prefer
 | Publish and edit | New image/video posts and in-place video replacement in existing notes, with a local queue, authorization records, due times, and one active write per account |
 | Continue after interruption | Saved attempts, platform note IDs, readback, and reconciliation before another attempt |
 | Maintain existing posts | Inventory, supported text/topic/image edits, metrics, and review candidates |
+| Organize an account | Local series/episode catalog, inspection cursors, media lineage, and append-only metrics history |
+| Operate a batch | Bounded batch execution, per-item results, pause/cancel controls, and manual-publication handoff |
 | Use another client | CLI and standard MCP Server over the same controller and task database |
 
 Account preferences and operational records live outside the installed code. Media stays in the workspace you choose. Installation adds no recurring inspection or background publishing schedule.
+
+The runner selects eligible accounts, so one unresolved task does not hold up an unrelated account. An account ID or Chrome profile has one local state owner, including when more than one `XHS_OPS_HOME` exists on the machine.
 
 ## Install on macOS
 
@@ -61,10 +65,10 @@ export PATH="$HOME/.local/bin:$PATH"
 xhs-ops opencli profile list
 xhs-ops account probe --profile YOUR_PROFILE
 xhs-ops account add personal --user-id YOUR_USER_ID --profile YOUR_PROFILE
-xhs-ops doctor --account personal
+xhs-ops doctor --account personal --json
 ```
 
-Use the ID returned by the probe. Give each account its own profile binding. The [installation guide](docs/installation.md) covers a fresh machine, MCP clients, upgrades, and removal.
+Use the ID returned by the probe. Give each account its own profile binding. Doctor reports the installed source, toolchain, identity and capability evidence; untested capabilities remain `unknown`. The [installation guide](docs/installation.md) covers a fresh machine, MCP clients, upgrades, and removal.
 
 ## Publish a Prepared Package
 
@@ -97,6 +101,17 @@ An assistant can record an existing authorization for the requested batch; the `
 
 See [publishing and recovery](docs/publishing.md) for video packages, edits, scheduling, and interrupted tasks. [Synthetic examples](examples/) contain no account data or real posts.
 
+## Manage a Prepared Batch
+
+```bash
+xhs-ops ingest-batch ./posts/one/post.json ./posts/two/post.json --batch travel-set
+xhs-ops approve-batch travel-set --authorization "Publish this prepared batch" --now
+xhs-ops run-batch travel-set --limit 4
+xhs-ops handoff TASK_ID
+```
+
+Each item retains its own content fingerprint and result. A manual platform action can be linked back to the original task with `link-existing`; a recovery reads the saved attempt before another submission. Catalog, metric history, media provenance and backup/restore workflows are covered in [account operations](docs/operations.md).
+
 ## Use With an MCP Client
 
 The standard STDIO server is available as `rednote-steward-mcp`:
@@ -115,7 +130,7 @@ Use the installed executable's absolute path when your client does not inherit t
 
 ## Current Scope
 
-The first release targets macOS and logged-in Chrome through OpenCLI. Image publishing, existing-post maintenance, account reads, and inventory build on the original local workflow. Video and custom-cover support are included in the adapter; automated tests exercise their control flow, while live video publication remains a separate acceptance step. Platform changes may require adapter updates.
+The local browser workflow targets macOS and logged-in Chrome through the pinned OpenCLI/Browser Bridge combination. Image publishing, existing-post maintenance, account reads, and inventory build on the original workflow. Video and custom-cover support are included in the adapter. Tests exercise control flow; live media acceptance is recorded separately for the relevant account and environment. Platform changes may require adapter updates.
 
 The CLI, standard MCP Server and assistant Skill share the same task owner. The source Package also declares read-only OPL shared MCP App views for task lists, exact content differences, frozen media and platform readback. Its Package admission remains development-only until carrier installation and host acceptance are completed. Use `xhs-ops review TASK_ID` or `task_review` in clients without a shared UI. Content generation and automatic photo enhancement are performed by the tools you choose; Steward manages their prepared outputs and publication records.
 
@@ -123,7 +138,9 @@ The CLI, standard MCP Server and assistant Skill share the same task owner. The 
 
 - [Installation](docs/installation.md) — new users, browser connection, MCP, upgrades, and removal.
 - [Publishing and recovery](docs/publishing.md) — content packages, edits, task states, and reconciliation.
+- [Account operations](docs/operations.md) — batches, manual handoff, catalog, metrics history, media lineage, and backups.
 - [Architecture](docs/architecture.md) — the shared controller, account isolation, and private data layout.
+- [Backend compatibility](docs/backend-compatibility.md) — capability evidence and read-only comparisons before an adapter upgrade.
 - [Assistant Skill](skills/rednote-steward/SKILL.md) — publishing and account-maintenance guidance.
 
 ```bash

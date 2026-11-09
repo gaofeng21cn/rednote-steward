@@ -30,6 +30,36 @@
       ],
       "stdin": "request_json",
       "passthrough": true
+    },
+    "rednote.steward.v1#catalog": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
+    },
+    "rednote.steward.v1#history": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
+    },
+    "rednote.steward.v1#recovery": {
+      "kind": "command",
+      "cwd": "package",
+      "argv": [
+        "node",
+        "./src/app-contribution.mjs"
+      ],
+      "stdin": "request_json",
+      "passthrough": true
     }
   },
   "actions": {}

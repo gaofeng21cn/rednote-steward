@@ -40,9 +40,13 @@ RedNote Steward 把准备好的素材、账号配置、发布任务和平台结�
 | 发布与编辑 | 新发图文/视频、原地替换旧帖视频，并配合本地任务队列、授权记录、计划时间和同账号串行执行 |
 | 中断后继续 | 保存尝试记录、平台笔记 ID 与回读结果，先查清结果再执行下一次 |
 | 维护历史内容 | 读取清单与指标，编辑平台支持的文字、话题及图片，整理待复查内容 |
+| 组织账号资产 | 本地系列/集数目录、巡检游标、媒体来源和追加式指标历史 |
+| 管理批次 | 限量执行、逐项结果、暂停/取消，以及人工发布交接 |
 | 换一个客户端 | CLI 与标准 MCP Server 共用控制器和任务数据库 |
 
 账号偏好和运维记录保存在安装代码之外，素材留在你选定的工作区。安装后按需运行，定期巡检或后台发布另行配置。
+
+运行器会选择当前可执行的账号，一个未决任务不会挡住无关账号。同一台机器中，稳定账号 ID 或 Chrome profile 只对应一个状态 owner，多个 `XHS_OPS_HOME` 也不能绕过这一归属。
 
 ## 在 macOS 上安装
 
@@ -61,10 +65,10 @@ export PATH="$HOME/.local/bin:$PATH"
 xhs-ops opencli profile list
 xhs-ops account probe --profile YOUR_PROFILE
 xhs-ops account add personal --user-id YOUR_USER_ID --profile YOUR_PROFILE
-xhs-ops doctor --account personal
+xhs-ops doctor --account personal --json
 ```
 
-账号 ID 使用 probe 返回的值，每个账号分别绑定自己的 profile。[安装说明](docs/installation.md)包含新机准备、MCP 客户端配置、升级和卸载方法。
+账号 ID 使用 probe 返回的值，每个账号分别绑定自己的 profile。Doctor 显示安装来源、工具链、身份和能力证据；未测能力保留为 `unknown`。[安装说明](docs/installation.md)包含新机准备、MCP 客户端配置、升级和卸载方法。
 
 ## 发布准备好的内容
 
@@ -97,6 +101,17 @@ xhs-ops show TASK_ID
 
 视频包、旧帖编辑、计划时间和中断处理见[发布与恢复说明](docs/publishing.md)。[随仓示例](examples/)使用合成素材，不包含个人账号数据或真实帖子。
 
+## 管理准备好的批次
+
+```bash
+xhs-ops ingest-batch ./posts/one/post.json ./posts/two/post.json --batch travel-set
+xhs-ops approve-batch travel-set --authorization "发布这一批已准备好的内容" --now
+xhs-ops run-batch travel-set --limit 4
+xhs-ops handoff TASK_ID
+```
+
+每篇内容保留自己的指纹和结果。人工完成平台操作后，可以用 `link-existing` 关联回原任务；恢复时先读已有尝试，再决定下一次提交。账号目录、指标历史、媒体来源和备份恢复见[账号运维说明](docs/operations.zh-CN.md)。
+
 ## 连接 MCP 客户端
 
 标准 STDIO 服务入口为 `rednote-steward-mcp`：
@@ -115,7 +130,7 @@ xhs-ops show TASK_ID
 
 ## 当前范围
 
-首版面向 macOS，通过 OpenCLI 使用已登录的 Chrome。图文发布、旧帖维护、账号读取和内容清单沿用了已有本地工作流。适配器已包含视频和自定义封面的处理路径，自动化测试覆盖其执行流程；真实账号的视频发布还需要单独验收。平台页面变化时，适配器可能需要相应更新。
+本地浏览器流程面向 macOS，通过固定版本的 OpenCLI/Browser Bridge 使用已登录的 Chrome。图文发布、旧帖维护、账号读取和内容清单沿用了已有工作流。适配器已包含视频和自定义封面的处理路径，测试覆盖控制流程；真实媒体验收按具体账号和环境单独记录。平台页面变化时，适配器可能需要相应更新。
 
 CLI、标准 MCP Server 和助手 Skill 共用同一任务 owner。源码 Package 已声明 OPL 共享 MCP App 的只读任务列表、精确内容差异、冻结素材和平台回读视图；载体安装及宿主验收完成前，Package 保持 development-only。没有共享 UI 的客户端可使用 `xhs-ops review TASK_ID` 或 `task_review`。内容生成和照片增强由你选用的工具完成，Steward 管理准备好的成果及其发布记录。
 
@@ -123,7 +138,9 @@ CLI、标准 MCP Server 和助手 Skill 共用同一任务 owner。源码 Packag
 
 - [安装说明](docs/installation.md)：新用户、浏览器连接、MCP、升级和卸载。
 - [发布与恢复](docs/publishing.md)：内容包、编辑、任务状态与结果核对。
+- [账号运维](docs/operations.zh-CN.md)：批次、人工交接、账号目录、指标历史、媒体来源与备份。
 - [架构说明](docs/architecture.md)：统一控制器、账号隔离与私人数据位置。
+- [后端兼容](docs/backend-compatibility.md)：升级前的能力证据与只读比较。
 - [助手 Skill](skills/rednote-steward/SKILL.md)：发布及账号维护方法。
 
 ```bash

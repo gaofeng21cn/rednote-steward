@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "source": "sample.svg",
+      "derived": "sample.png",
+      "purpose": "raster-export",
+      "tool": "synthetic-example",
+      "parameters": {}
+    }
+  ]
+}

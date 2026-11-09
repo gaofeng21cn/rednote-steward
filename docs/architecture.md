@@ -22,18 +22,26 @@ flowchart LR
 | Account binding | Maps a local alias to a stable platform user ID and browser profile |
 | Content package | Defines the intended title, body, topics, media, and existing-note relationship |
 | Task | Stores the frozen package, authorization, due time, attempts, and current state |
+| Batch | Groups a bounded set of tasks for authorization, execution and per-item results |
 | Platform note | Identifies the published or edited post by its platform ID |
+| Catalog and series | Organizes observed platform notes by account, series, episode, source and maintenance decision |
+| Media lineage | Links originals, derivatives and the bytes selected for upload |
+| Metric observation | Stores an account/note measurement at its capture time |
 | Readback and receipt | Records the adapter result and which platform fields were checked |
 
 The source package and prepared media stay in the user's workspace. Ingestion hashes the selected media and stores its paths with the task. Execution checks that the files still match before using them. A revised package is a distinct version; it does not silently replace a queued task's input.
 
 ## Execution and recovery
 
-Task claims and account write locks are shared across processes. A CLI invocation and an MCP worker therefore cannot execute the same queued task twice. Account identity is checked in the selected browser profile before a write.
+Task claims are transactional in the private SQLite database. Automatic selection chooses an eligible due task, keeping each account's unresolved outcomes isolated from unrelated accounts. A local registry assigns one state owner to a stable account ID or browser profile across state roots on the same machine. Account identity is checked in the selected browser profile before a write.
 
 A successful browser submission and a matching platform readback are recorded separately. When the outcome is uncertain, the task preserves that uncertainty and the account remains held for reconciliation. Recovery first reads the current platform state, links the matching note when available, and records the evidence. Retrying is a later action based on the resolved result and the applicable user authorization.
 
 MCP execution launches a separate worker and returns a task ID. Clients query that task for progress and completion. This keeps a long upload independent of a single tool response window.
+
+Attempts retain observed phases and structured errors. A worker launch, a claimed task and a platform submission are separate evidence. Adapter phase events explain upload/processing/preparation when observed; a phase checkpoint does not guarantee the browser or platform retained the composer. Manual publication uses the original task's handoff and a read-only link to the exact platform note. Receipt, metric or later observation failures are repaired without submitting the publication again.
+
+Pause controls prevent future claims, while cancellation is limited to unstarted tasks. A batch is an execution group, independent from a series of related content. Each item retains its own fingerprint, authorization and result.
 
 ## Data and installation
 
@@ -43,11 +51,19 @@ The default private data root is `~/.local/share/rednote-steward`, selected with
 
 OpenCLI is bundled at a tested version. The packaged adapter runner loads Steward's commands without replacing an independently installed OpenCLI or modifying the user's `~/.opencli` adapter directory. Chrome retains its own login state.
 
+The release manifest describes package/source identity, dependency versions and capability evidence. Installation receipts and doctor use that identity to distinguish source, installed release, browser connection, account login and qualified media operations. Unmeasured capabilities remain unknown. Public diagnostics redact account identifiers, cookies, source media and private paths.
+
+Release packaging starts from committed source and produces a versioned archive, manifest and checksums. Installation validates the archive checksum and the manifest's public-content digest before selecting the new version. `--source` development installs record their actual source revision and dirty state. This identity stays separate from the private account data and browser qualification results.
+
+Catalog synchronization is a local observation and organization operation. It preserves series and maintenance decisions while updating platform fields, and creates no publication tasks. Metric observations append account/note/capture-time rows; the latest metrics view remains a convenience projection. Optional media lineage records source and derivative hashes without processing the files.
+
+Backups use a consistent SQLite snapshot with configuration and selected receipt files. Restore previews validate checksums, schema and path mappings before writing an empty destination. Restored active attempts become unresolved and process IDs are cleared; restoring state does not launch a task.
+
 ## Adapter responsibility
 
 OpenCLI performs browser operations through Browser Bridge. The controller owns task identity, package version, account serialization, authorization records, and recovery. Adapters own the actual page interaction and expose what the platform returned.
 
-The first release focuses on macOS and one backend. Optional backends can later implement the same task semantics after their media, cover, native-topic, editing, and readback behavior has been verified. The OPL shared MCP App reads the existing queue through `src/app-contribution.mjs`; it owns no task state. Task, content and media views use the existing Package descriptor and contribution ABI. `review` opens SQLite read-only and never initializes a database, starts a worker, or reads the platform. Review data includes the frozen content fingerprint, the stored task revision, source drift, same-note field verification and separate publication evidence. Media drift disables the artifact link rather than presenting changed bytes as the frozen asset.
+The local browser workflow focuses on macOS and one backend. Optional backends can later implement the same task semantics after their media, cover, native-topic, editing, and readback behavior has been verified. The OPL shared MCP App reads the existing queue through `src/app-contribution.mjs`; it owns no task state. Task, content and media views use the existing Package descriptor and contribution ABI. `review` opens SQLite read-only and never initializes a database, starts a worker, or reads the platform. Review data includes the frozen content fingerprint, the stored task revision, source drift, same-note field verification and separate publication evidence. Media drift disables the artifact link rather than presenting changed bytes as the frozen asset.
 
 ## Verification
 

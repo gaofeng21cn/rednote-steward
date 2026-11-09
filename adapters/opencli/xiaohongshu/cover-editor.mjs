@@ -19,7 +19,7 @@ export async function applyCover(page, cover) {
   if (!opened) throw new CommandExecutionError('The custom cover control is unavailable; the video remains unsubmitted');
   await page.wait({ time: 0.5 });
   await page.evaluate(`() => {
-    const target = Array.from(document.querySelectorAll('[role="dialog"] button, [role="dialog"] [role="tab"], [class*="cover"] button, [class*="cover"] [class*="tab"]'))
+    const target = Array.from(document.querySelectorAll('[role="dialog"] button, [role="dialog"] [role="tab"], .d-modal button, .d-modal [role="tab"], [class*="cover"] button, [class*="cover"] [class*="tab"]'))
       .find(el => el.offsetParent !== null && /^(上传封面|本地上传|上传图片)$/.test((el.innerText || '').trim()));
     if (target) target.click();
     return Boolean(target);
@@ -38,9 +38,10 @@ export async function applyCover(page, cover) {
   }`);
   await attachFiles(page, [cover], selector);
   await waitFor(page, async () => Boolean(await page.evaluate(`(previousSources => {
+    const visible = el => Boolean(el && el.offsetParent !== null);
     const input = document.querySelector('input[data-rednote-cover-input="true"]');
     const dialog = input?.closest('[role="dialog"], .d-modal, [class*="cover-dialog"], [class*="cover-modal"]');
-    return Boolean(dialog && Array.from(dialog.querySelectorAll('img')).some(img => img.complete && img.naturalWidth > 0 && !previousSources.includes(img.currentSrc || img.src || '')) && !dialog.querySelector('[class*="loading"], [class*="uploading"]'));
+    return Boolean(dialog && Array.from(dialog.querySelectorAll('img')).some(img => img.complete && img.naturalWidth > 0 && !previousSources.includes(img.currentSrc || img.src || '')) && !Array.from(dialog.querySelectorAll('[class*="loading"], [class*="uploading"]')).some(visible));
   })(${JSON.stringify(previousSources)})`)), 30_000, 500, 'custom cover preview');
   const selected = await page.evaluate(`() => {
     const input = document.querySelector('input[data-rednote-cover-input="true"]');

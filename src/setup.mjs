@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { buildIdentity } from './lib/build.mjs';
 
 const exec = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -181,7 +182,13 @@ export async function setup(options = {}) {
   const p = paths(options);
   const receipt = await readJson(p.receipt, { schemaVersion: 1, product: 'rednote-steward', files: [], mcp: null });
   if (receipt.product !== 'rednote-steward' || !Array.isArray(receipt.files)) throw new Error('Installation record does not belong to RedNote Steward.');
-  if (options.status) return { ok: true, ...p, installed: receipt.files, mcp: receipt.mcp, extensionReady: await exists(path.join(p.extension, 'manifest.json')) };
+  const build = await buildIdentity(p.sourceRoot);
+  receipt.version = build.version;
+  receipt.sourceRevision = build.sourceRevision;
+  receipt.sourceDirty = build.sourceDirty;
+  receipt.contentDigest = build.content.digest;
+  receipt.browserBridge = build.browserBridge;
+  if (options.status) return { ok: true, ...p, build, installed: receipt.files, mcp: receipt.mcp, extensionReady: await exists(path.join(p.extension, 'manifest.json')) };
   if (options.uninstall) return uninstall(p, options, receipt);
 
   const checks = [];
@@ -214,5 +221,6 @@ export async function setup(options = {}) {
     'Sign in to Xiaohongshu in that Chrome profile, then bind its stable user ID and profile with xhs-ops account add.',
     'Run xhs-ops doctor to check the installed toolchain and bound account.',
   ];
+  await saveJson(p.receipt, receipt);
   return output;
 }

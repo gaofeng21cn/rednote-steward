@@ -4,10 +4,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import vm from 'node:vm';
-import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript } from '../adapters/opencli/xiaohongshu/steward-publish.js';
+import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
 import { sameTopics, replaceVideo } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
+import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
+import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
 import { getRegistry } from '@jackwener/opencli/registry';
 import '../adapters/opencli/xiaohongshu/inventory.js';
 import '../adapters/opencli/xiaohongshu/edit-note.js';
@@ -16,6 +18,15 @@ function evaluate(source, context = {}) {
   const result = vm.runInNewContext(`(${source})`, context);
   return typeof result === 'function' ? result() : result;
 }
+
+test('page classification uses the observed path and ignores redirect query text', () => {
+  assert.equal(assertCreatorLocation('https://creator.xiaohongshu.com/publish/update?id=abc&redirect=/captcha/login').pathname, '/publish/update');
+  assert.throws(() => assertCreatorLocation('https://creator.xiaohongshu.com/website-login?redirect=/publish'),
+    error => error.code === 'AUTH_REQUIRED');
+  assert.throws(() => assertCreatorLocation('https://creator.xiaohongshu.com/website-login/captcha?redirect=/publish'),
+    error => error.code === 'VERIFICATION_REQUIRED');
+  assert.throws(() => assertCreatorLocation('https://example.invalid/?next=creator.xiaohongshu.com'), /left.*origin/);
+});
 
 test('publish rejects mixed media and cover without video before browser use', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-adapters-'));
@@ -40,6 +51,67 @@ test('unknown upload failure never retries attachment', async () => {
   const page = { setFileInput: async () => { calls++; throw new Error('Bridge connection lost'); } };
   await assert.rejects(attachFiles(page, ['/synthetic/video.mp4'], 'input'), /connection lost/);
   assert.equal(calls, 1);
+});
+
+test('custom cover waits for visible uploads and confirms the selected filename', async () => {
+  let uploads = 0, closed = false;
+  const image = { src: 'https://example.invalid/old.jpg', complete: true, naturalWidth: 100 };
+  const confirm = { disabled: false, innerText: '保存', click() { closed = true; dialog.offsetParent = null; } };
+  const input = { accept: 'image/png', files: [], setAttribute() {}, closest: () => dialog };
+  const dialog = { offsetParent: {}, querySelectorAll(selector) {
+    if (selector === 'input[type="file"]') return [input];
+    if (selector === 'img') return [image];
+    if (selector.includes('loading')) return [{ offsetParent: null }];
+    if (selector.startsWith('button')) return [confirm];
+    return [];
+  } };
+  const document = {
+    querySelector: () => input,
+    querySelectorAll(selector) {
+      if (selector.startsWith('button')) return [{ offsetParent: {}, innerText: '编辑封面', click() {} }];
+      if (selector.startsWith('[role="dialog"] button')) return [{ offsetParent: {}, innerText: '上传图片', click() {} }];
+      if (selector.startsWith('[role="dialog"],')) return [dialog];
+      return [];
+    },
+  };
+  const page = { wait: async () => {}, evaluate: source => evaluate(source, { document }),
+    setFileInput: async () => { uploads++; input.files = [{ name: 'cover.png' }]; image.src = 'blob:new-cover'; } };
+  const result = await applyCover(page, '/synthetic/cover.png');
+  assert.equal(result.confirmationClicked, true);
+  assert.equal(result.filename, 'cover.png');
+  assert.equal(result.identityVerifiedAfterSave, false);
+  assert.equal(uploads, 1);
+  assert.equal(closed, true);
+});
+
+test('prepare-only returns the observed composer without invoking submission', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-prepare-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const image = path.join(dir, 'image.png');
+  await fs.writeFile(image, 'synthetic image');
+  let attached = 0, calls = 0;
+  const snapshot = { url: 'https://creator.xiaohongshu.com/publish/publish', title: 'A walk',
+    body: 'A quiet morning', topics: [], imageCount: 1, mediaType: 'image', images: [] };
+  const responses = [snapshot.url, true, true,
+    { pending: false, errors: [], imageCount: 1, videoPresent: false }, 'ready', 'found', snapshot];
+  const page = {
+    goto: async () => {}, wait: async () => {},
+    setFileInput: async () => { attached++; },
+    fillText: async (_selector, text) => ({ filled: true, verified: true, actual: text }),
+    evaluate: async () => {
+      calls++;
+      if (!responses.length) throw new Error('Unexpected browser action after prepared snapshot');
+      return responses.shift();
+    },
+  };
+  const result = await publishNote(page, { title: snapshot.title, content: snapshot.body, images: image,
+    topics: '', 'prepare-only': true });
+  assert.equal(result[0].status, 'prepared');
+  assert.equal(result[0].submitted, false);
+  assert.equal(result[0].recovery.persistedDraftVerified, false);
+  assert.equal(result[0].snapshot, snapshot);
+  assert.equal(attached, 1);
+  assert.equal(calls, 7);
 });
 
 test('a throwing submit handler never triggers another method or click', async () => {

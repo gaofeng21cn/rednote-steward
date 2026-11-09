@@ -7,8 +7,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { cli, Strategy } from '@jackwener/opencli/registry';
-import { ArgumentError, AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
+import { ArgumentError, CommandExecutionError } from '@jackwener/opencli/errors';
 import { attachFiles, applyCover } from './cover-editor.mjs';
+import { applyDeclarations, validateDeclarations } from './declarations.mjs';
+import { emitProgress } from '../../../src/lib/progress.mjs';
+import { assertCreatorLocation } from './page-check.mjs';
 export { attachFiles, applyCover } from './cover-editor.mjs';
 import {
   validateTitle, validateBody, validateTopics, validateImages,
@@ -33,14 +36,16 @@ export function validatePublishInput(kwargs) {
   if (cover) validateImages(cover);
   const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
   if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) throw new ArgumentError('upload-timeout must be 10–3600 seconds');
-  return { title, body, topics, images, video, cover, timeoutMs: timeoutSeconds * 1000 };
+  const prepareOnly = kwargs['prepare-only'] === true || kwargs['prepare-only'] === 'true';
+  return { title, body, topics, images, video, cover, declarations: validateDeclarations(kwargs),
+    prepareOnly, timeoutMs: timeoutSeconds * 1000 };
 }
 
 export async function selectPublishSurface(page, kind) {
   await page.goto(`${PUBLISH_URL}&target=${kind}`);
   await page.wait({ time: 1 });
   const url = String(await page.evaluate('location.href'));
-  if (/login|passport/i.test(url) || !url.startsWith('https://creator.xiaohongshu.com/')) throw new AuthRequiredError('creator.xiaohongshu.com');
+  assertCreatorLocation(url);
   const selector = kind === 'video' ? VIDEO_INPUT : IMAGE_INPUT_SELECTOR;
   if (!await page.evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) {
     const label = kind === 'video' ? '上传视频' : '上传图文';
@@ -101,16 +106,29 @@ export async function submitOnce(page) {
 export async function publishNote(page, kwargs) {
   const input = validatePublishInput(kwargs);
   const selector = await selectPublishSurface(page, input.video ? 'video' : 'image');
+  emitProgress('selected', { kind: 'publish', mediaType: input.video ? 'video' : 'image' });
+  emitProgress('uploading', { mediaCount: input.video ? 1 : input.images.length });
   await attachFiles(page, input.video ? [input.video] : input.images, selector);
+  emitProgress('processing');
   const media = await waitForMedia(page, input);
   const cover = input.cover ? await applyCover(page, input.cover) : null;
   await fillTitle(page, input.title);
   await fillBody(page, input.body);
   await replaceTopics(page, input.topics);
+  const declarations = await applyDeclarations(page, input.declarations);
   const prepared = await readEditor(page);
   if (!prepared || prepared.title !== input.title || normalizeForComparison(prepared.body) !== normalizeForComparison(input.body) || !sameTopics(prepared.topics, input.topics) || prepared.topics.some(topic => !topic.id)) {
     throw new CommandExecutionError('Composer title, body or native topic nodes do not match the requested package');
   }
+  emitProgress('prepared', { mediaType: input.video ? 'video' : 'image', imageCount: input.images.length,
+    nativeTopicCount: prepared.topics.length, declarations: declarations.observed,
+    composer: { url: prepared.url, observedAt: new Date().toISOString(), persistence: 'not-confirmed' } });
+  if (input.prepareOnly) return [{ status: 'prepared', submitted: false, title: input.title,
+    mediaType: input.video ? 'video' : 'image', imageCount: input.images.length,
+    topics: prepared.topics, media, cover, declarations, snapshot: prepared,
+    recovery: { composerObserved: true, persistedDraftVerified: false,
+      instruction: 'Inspect this same composer and account before continuing; no submission was invoked.' } }];
+  emitProgress('submit_attempted', { kind: 'publish' });
   const invocation = await submitOnce(page);
   await waitFor(page, async () => Boolean(await page.evaluate(`() => {
     const url = new URL(location.href);
@@ -118,8 +136,9 @@ export async function publishNote(page, kwargs) {
       (['/publish/publishSuccess', '/publish/success'].includes(url.pathname) ||
         Boolean(Array.from(document.querySelectorAll('[class*="success"]')).find(el => el.offsetParent !== null && /发布成功/.test(el.innerText || ''))));
   }`)), 30_000, 500, 'publish confirmation');
+  emitProgress('platform_accepted', { confirmation: 'creator-success-page-or-message' });
   return [{ status: 'submitted', title: input.title, mediaType: input.video ? 'video' : 'image',
-    imageCount: input.images.length, topics: prepared.topics, media, cover, invocation,
+    imageCount: input.images.length, topics: prepared.topics, media, cover, declarations, invocation,
     verification: 'submission-confirmed; saved fields require same-note readback' }];
 }
 
@@ -135,8 +154,11 @@ cli({
     { name: 'video', help: 'Local video file; mutually exclusive with images' },
     { name: 'cover', help: 'Custom video cover image' },
     { name: 'topics', help: 'Comma-separated exact native topic names' },
+    { name: 'original', help: 'Explicit original declaration: true or false; omitted leaves the current setting' },
+    { name: 'ai-declaration', help: 'Explicit AI-generated declaration: true or false; omitted leaves the current setting' },
+    { name: 'prepare-only', type: 'bool', default: false, help: 'Prepare and inspect the composer without invoking submission' },
     { name: 'upload-timeout', type: 'int', default: 600, help: 'Upload/processing timeout in seconds' },
   ],
-  columns: ['status', 'title', 'mediaType', 'imageCount', 'topics', 'media', 'cover', 'invocation', 'verification'],
+  columns: ['status', 'title', 'mediaType', 'imageCount', 'topics', 'media', 'cover', 'declarations', 'invocation', 'verification', 'submitted', 'snapshot', 'recovery'],
   func: publishNote,
 });

@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import * as os from 'node:os';
+import { publicContentDigest } from '../src/lib/build.mjs';
 
 const exec = promisify(execFile);
 const args = process.argv.slice(2);
@@ -26,6 +27,20 @@ if (root === path.parse(root).root || root === source || bin === root) throw new
 
 const pkg = JSON.parse(await fs.readFile(path.join(source, 'package.json'), 'utf8'));
 if (pkg.name !== 'rednote-steward') throw new Error('Source package is not RedNote Steward.');
+const manifest = await fs.readFile(path.join(source, 'release-manifest.json'), 'utf8').then(value => JSON.parse(value)).catch(error => {
+  if (error.code === 'ENOENT') return null;
+  throw error;
+});
+if (manifest && (manifest.schemaVersion !== 1 || manifest.product !== 'rednote-steward' || manifest.version !== pkg.version)) {
+  throw new Error('Release manifest identity does not match this package.');
+}
+const sourceRevision = manifest?.sourceRevision || null;
+const expectedContentDigest = manifest?.content?.digest || null;
+const actualContent = await publicContentDigest(source);
+const contentDigest = actualContent.digest;
+if (expectedContentDigest && expectedContentDigest !== contentDigest) {
+  throw new Error(`Release manifest content digest does not match source files: expected ${expectedContentDigest}, observed ${contentDigest}`);
+}
 const versionDir = path.join(root, 'releases', `${pkg.version}-${Date.now()}`);
 await fs.mkdir(path.dirname(versionDir), { recursive: true });
 // Rename on the same device when possible; copying supports a separate /tmp volume.
@@ -69,7 +84,10 @@ for (const [name, entry] of [['xhs-ops', 'src/cli.mjs'], ['rednote-steward-mcp',
   await fs.chmod(target, 0o755);
   wrappers.push({ path: target, sha256: sha(content), backup, originalLink });
 }
-const record = { product: 'rednote-steward', root, bin, node, stateRoot, version: pkg.version, current: versionDir, wrappers, installedAt: new Date().toISOString() };
+const record = { product: 'rednote-steward', root, bin, node, stateRoot, version: pkg.version,
+  sourceRevision, sourceDirty: manifest?.sourceDirty ?? null, contentDigest,
+  releaseManifest: manifest ? { generatedAt: manifest.generatedAt ?? null, browserBridge: manifest.browserBridge ?? null } : null,
+  current: versionDir, wrappers, installedAt: new Date().toISOString() };
 await fs.writeFile(markerFile, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
 const setupFlags = ['--skill', '--mcp', '--browser-extension'].filter((flag) => args.includes(flag));
 let setupResult;
@@ -102,4 +120,5 @@ try {
     throw new Error(`Setup failed; the previous commands and application selection were restored. ${error.stderr || error.message}`);
   }
 }
-process.stdout.write(`${JSON.stringify({ ok: true, integrationsReady: setupResult.ok, version: pkg.version, application: current, commands: wrappers.map((item) => item.path) }, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify({ ok: true, integrationsReady: setupResult.ok, version: pkg.version, sourceRevision,
+  contentDigest, application: current, commands: wrappers.map((item) => item.path) }, null, 2)}\n`);

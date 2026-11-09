@@ -6,5 +6,9 @@
   "title": "示例：一张插画",
   "body": "这是一张用于演示内容包结构的合成插画。",
   "topics": [],
-  "images": ["sample.png"]
+  "images": ["sample.png"],
+  "seriesId": "sample-discoveries",
+  "episode": 1,
+  "contentType": "travel-photo",
+  "mediaLineage": "media-lineage.json"
 }
