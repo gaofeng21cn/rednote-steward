@@ -126,6 +126,10 @@ and differs from the cover saved before the cover stage. CDN host or signature
 changes alone do not count as a resource change; this comparison does not compare
 transformed image bytes.
 
+For recovery or maintenance, `cover` may be supplied without `video` on an
+existing video note. That path changes the approved copy, native topics and
+custom cover in one save while leaving the already-saved video untouched.
+
 The attempt retains stage and cover-selection evidence for read-only recovery if
 the final adapter response is lost. If a stage stops, inspect `show`, `handoff` and
 the same platform note, then reconcile it. A saved video with an unfinished cover

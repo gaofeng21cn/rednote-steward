@@ -26,7 +26,7 @@ cli({
     { name: 'topics', default: '', help: 'Comma-separated exact Xiaohongshu topics; empty removes topics when replacing the body' },
     { name: 'images', default: '', help: 'Comma-separated complete image list in display order; empty keeps existing images' },
     { name: 'video', default: '', help: 'Replacement video file; empty keeps existing video' },
-    { name: 'cover', default: '', help: 'Custom cover for the replacement video' },
+    { name: 'cover', default: '', help: 'Custom video cover; may be used alone to preserve the saved video' },
     { name: 'original', help: 'Explicit original declaration: true or false; omitted leaves the current setting' },
     { name: 'ai-declaration', help: 'Explicit AI-generated declaration: true or false; omitted leaves the current setting' },
     { name: 'prepare-only', type: 'bool', default: false, help: 'Prepare the edit without invoking submission' },
@@ -45,7 +45,7 @@ cli({
     const cover = kwargs.cover ? validateImages(kwargs.cover) : [];
     const desiredDeclarations = validateDeclarations(kwargs);
     const prepareOnly = kwargs['prepare-only'] === true || kwargs['prepare-only'] === 'true';
-    if (cover.length > 1 || (cover.length && !video)) throw new CommandExecutionError('A custom cover requires exactly one replacement video');
+    if (cover.length > 1) throw new CommandExecutionError('Choose at most one custom cover');
     if (video && images.length) throw new CommandExecutionError('Choose replacement video or images, not both');
     const timeoutSeconds = Number(kwargs['upload-timeout'] ?? 600);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 10 || timeoutSeconds > 3600) {
@@ -56,12 +56,13 @@ cli({
       throw new CommandExecutionError('cover-timeout must be between 10 and 600 seconds');
     }
 
-    await openEditor(page, noteId, video ? 'video' : 'normal');
+    const editsVideo = Boolean(video) || cover.length > 0;
+    await openEditor(page, noteId, editsVideo ? 'video' : 'normal');
     emitProgress('selected', { kind: 'edit', noteId });
     const before = await readEditor(page);
     if (!before) throw new CommandExecutionError('The note editor loaded but its fields could not be read');
-    if (video && before.mediaType !== 'video') {
-      throw new CommandExecutionError('Video replacement requires an existing video note');
+    if (editsVideo && before.mediaType !== 'video') {
+      throw new CommandExecutionError('Video replacement and custom covers require an existing video note');
     }
 
     if (kwargs['dry-run']) {
@@ -81,6 +82,19 @@ cli({
 
     const replacement = video ? await replaceVideo(page, video, timeoutSeconds * 1000) : null;
     let coverSelection = null;
+    if (cover.length && !video) {
+      const preCoverSource = videoSourceIdentity(before.cover?.url) ? before.cover.url : null;
+      if (!preCoverSource) {
+        throw new CommandExecutionError(
+          `The saved video stage has no readable cover source for note ${noteId}`,
+          `Inspect ${editUrl(noteId)} before changing its custom cover.`,
+        );
+      }
+      coverSelection = {
+        ...(await applyCover(page, cover[0], { previewTimeoutMs: coverTimeoutSeconds * 1000 })),
+        preCoverSource,
+      };
+    }
     await fillTitle(page, title);
     await fillBody(page, content);
     await replaceTopics(page, topics);
@@ -108,8 +122,10 @@ cli({
     if (video && (!prepared.videoPresent || !prepared.video?.src || prepared.video.src === before.video?.src)) {
       throw new CommandExecutionError('Pre-submit video is absent or not ready');
     }
+    const firstStage = video && cover.length ? 'video-and-copy'
+      : cover.length ? 'cover-and-copy' : 'single';
     emitProgress('prepared', { kind: 'edit', noteId, mediaType: prepared.mediaType,
-      stage: video && cover.length ? 'video-and-copy' : 'single',
+      stage: firstStage,
       ...(video && cover.length ? { pendingStages: ['cover-and-copy'] } : {}),
       nativeTopicCount: prepared.topics.length, declarations: declarations.observed,
       composer: { url: prepared.url, observedAt: new Date().toISOString(), persistence: 'not-confirmed' } });
@@ -120,9 +136,9 @@ cli({
         ...(video && cover.length ? { coverStage: 'pending-after-video-save', pendingStages: ['cover-and-copy'] } : {}),
         instruction: 'Inspect this same composer and account before continuing; no submission was invoked.' } }];
     const stages = [];
-    emitProgress('submit_attempted', { kind: 'edit', noteId, stage: video && cover.length ? 'video-and-copy' : 'single' });
+    emitProgress('submit_attempted', { kind: 'edit', noteId, stage: firstStage });
     let submitMethod = await submitEdit(page);
-    stages.push({ stage: video && cover.length ? 'video-and-copy' : 'single', submitMethod });
+    stages.push({ stage: firstStage, submitMethod });
     emitProgress('platform_accepted', { kind: 'edit', noteId, stage: stages[0].stage,
       confirmation: 'creator-edit-success-page' });
 
@@ -173,10 +189,10 @@ cli({
     }
 
     emitProgress('readback', { noteId });
-    await openEditor(page, noteId, video ? 'video' : 'normal');
+    await openEditor(page, noteId, editsVideo ? 'video' : 'normal');
     let after = await readEditor(page);
     if (!after) throw new CommandExecutionError('The note editor could not be reopened for readback');
-    if (video) await waitFor(page, async () => {
+    if (editsVideo) await waitFor(page, async () => {
       after = await readEditor(page);
       return after?.videoPresent && Boolean(after.video?.src);
     }, 15_000, 500, 'saved video metadata');
