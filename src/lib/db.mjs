@@ -11,9 +11,23 @@ function ensureColumns(db, table, definitions) {
 export function openDatabase(dbPath) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(dbPath, { timeout: 5000 });
-  db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-  db.exec('BEGIN IMMEDIATE');
+  db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
+  // A first-time journal-mode change can return SQLITE_BUSY immediately,
+  // bypassing busy_timeout when another initializer holds the database.
+  const deadline = Date.now() + 5000;
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  while (true) {
+    try { db.exec('PRAGMA journal_mode = WAL'); break; }
+    catch (error) {
+      const sqliteCode = Number(error.errcode) & 255;
+      if (![5, 6].includes(sqliteCode) || Date.now() >= deadline) { db.close(); throw error; }
+      Atomics.wait(pause, 0, 0, Math.min(25, deadline - Date.now()));
+    }
+  }
+  let transactionStarted = false;
   try {
+  db.exec('BEGIN IMMEDIATE');
+  transactionStarted = true;
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, kind TEXT NOT NULL,
       account TEXT NOT NULL, expected_account TEXT, source_note_id TEXT,
@@ -43,7 +57,7 @@ export function openDatabase(dbPath) {
     top_source: 'TEXT', top_source_pct: 'TEXT', top_interest: 'TEXT', top_interest_pct: 'TEXT',
   });
   db.exec('COMMIT');
-  } catch (error) { db.exec('ROLLBACK'); db.close(); throw error; }
+  } catch (error) { if (transactionStarted) db.exec('ROLLBACK'); db.close(); throw error; }
   // Ingest also uses BEGIN IMMEDIATE so duplicate detection and insertion are indivisible.
   fs.chmodSync(dbPath, 0o600);
   return db;
