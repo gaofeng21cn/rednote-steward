@@ -170,6 +170,11 @@ After editing, inspect the task's readback of that same ID. Use field evidence t
 
 ## Interrupted tasks
 
+Ordinary adapter calls close their own browser tab after returning or failing.
+`prepare-only` and explicit `--keep-tab true` preserve the page for inspection.
+Tab cleanup does not clear an uncertain task outcome; reconcile the same note
+before another write. User tabs and other sessions are outside the cleanup scope.
+
 Read the task before taking another action:
 
 ```bash

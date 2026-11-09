@@ -30,6 +30,10 @@ Each batch item keeps its own result. Pause prevents future claims; it does not 
 
 ## Recover an interrupted task
 
+Ordinary adapter calls close their own tab; `prepare-only`, explicit `--keep-tab true`
+and persistent sessions retain it for handoff. Keep tab cleanup separate from task
+reconciliation. Inspect the retained page before assuming that uploaded media remain.
+
 Read `task_get` / `show` first. Use `handoff` to obtain the exact frozen content, media order, topics, last phase and next action. Use `task_reconcile` / `reconcile` to inspect the platform result. An uncertain submission is never a reason to send the same item again. Use the absence path only after the account inventory, saved attempt and composer inspection establish that the item was not submitted.
 
 Phase records explain observed work; they do not guarantee the platform retained uploaded media after a tab or process closed. Reuse an uploaded composer only when its exact account, content/media and unsubmitted state have been observed. A person's manual click should be associated with the original task using `link-existing`; preserve the manual statement separately from same-note platform readback. Reconciliation, linking and missing receipt/metrics recovery never re-submit the post.

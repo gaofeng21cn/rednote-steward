@@ -89,6 +89,39 @@ test('a zero exit code cannot hide a known disconnected bridge while absent conn
   assert.equal(unknown.checks.find(item => item.name === 'opencli').status, 'unknown');
 });
 
+test('owned tab cleanup reports minimum Bridge compatibility without claiming live qualification', async t => {
+  const root = await fixture(t);
+  await fs.mkdir(path.join(root, 'adapters/opencli/xiaohongshu'), { recursive: true });
+  await fs.writeFile(path.join(root, 'adapters/opencli/xiaohongshu/owned-tab.mjs'), 'export {};\n');
+  const options = { root, home: path.join(root, 'state'), accountReader: () => [],
+    ownerProbe: () => ({ state: 'unregistered', leases: [] }) };
+  const inspect = extensionVersion => diagnose({ ...options, browserProbe: async () => ({ exitCode: 0,
+    json: { extensionConnected: true, daemonRunning: true, extensionVersion } }) });
+  for (const version of ['1.0.26', '1.0.27', '1.1.0']) {
+    const report = await inspect(version);
+    assert.equal(report.ok, true);
+    assert.deepEqual(report.capabilities.ownedTabCleanup, { implementation: 'present', liveQualification: 'unknown',
+      bridgeCompatibility: { state: 'compatible', minimumVersion: '1.0.26', observedVersion: version } });
+  }
+  const old = await inspect('1.0.25');
+  assert.equal(old.ok, false);
+  assert.equal(old.capabilities.ownedTabCleanup.bridgeCompatibility.state, 'unavailable');
+  assert.equal(old.capabilities.ownedTabCleanup.liveQualification, 'unknown');
+  assert.equal(old.checks.find(item => item.name === 'ownedTabCleanup').status, 'failed');
+  assert.match(old.capabilities.ownedTabCleanup.repair, /setup --browser-extension/);
+  assert.equal(old.next.some(item => /chrome:\/\/extensions/.test(item) && /load or reload/.test(item)), true);
+  for (const version of [undefined, 'unknown', '1.0.invalid']) {
+    const report = await inspect(version);
+    assert.equal(report.capabilities.ownedTabCleanup.bridgeCompatibility.state, 'unknown');
+    assert.equal(report.capabilities.ownedTabCleanup.liveQualification, 'unknown');
+    assert.equal(report.checks.find(item => item.name === 'ownedTabCleanup').status, 'unknown');
+  }
+  const redacted = redactHealth(old);
+  assert.deepEqual(redacted.capabilities.ownedTabCleanup.bridgeCompatibility, { state: 'unavailable', minimumVersion: '1.0.26', observedVersion: '1.0.25' });
+  assert.equal(redacted.capabilities.ownedTabCleanup.liveQualification, 'unknown');
+  assert.equal(JSON.stringify(redacted).includes(root), false);
+});
+
 test('doctor displays a dated read-only qualification and marks changed build evidence stale', async t => {
   const root = await fixture(t), home = path.join(root, 'private');
   const binding = { alias: 'example', userId: 'synthetic-user', profile: 'synthetic-profile' };

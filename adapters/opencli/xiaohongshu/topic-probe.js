@@ -12,6 +12,7 @@ import {
   CommandExecutionError,
   TimeoutError,
 } from '@jackwener/opencli/errors';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 const EDIT_PATH = '/publish/update';
 const BODY_SELECTOR = '.tiptap.ProseMirror';
@@ -111,7 +112,7 @@ cli({
     { name: 'topics', required: true, help: 'Comma-separated topic search terms' },
   ],
   columns: ['query', 'exact', 'labels'],
-  func: async (page, kwargs) => {
+  func: withOwnedTabCleanup(async (page, kwargs) => {
     const noteId = String(kwargs['note-id'] ?? '').trim();
     if (!/^[a-f0-9]{24}$/i.test(noteId)) {
       throw new ArgumentError('note-id must be the 24-character Xiaohongshu note ID');
@@ -153,5 +154,5 @@ cli({
       await page.wait({ time: 0.3 });
     }
     return results;
-  },
+  }),
 });

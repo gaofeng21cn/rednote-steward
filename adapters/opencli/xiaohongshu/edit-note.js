@@ -6,6 +6,7 @@ import { applyDeclarations, validateDeclarations } from './declarations.mjs';
 import { emitProgress } from '../../../src/lib/progress.mjs';
 import { videoSourceChanged, videoSourceIdentity } from '../../../src/lib/media.mjs';
 import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, replaceVideo, normalizeForComparison, sameTopics, submitEdit, editUrl, waitFor } from './editor-helpers.mjs';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 cli({
   site: 'xiaohongshu',
@@ -33,7 +34,7 @@ cli({
     { name: 'dry-run', type: 'bool', default: false, help: 'Open and read the note without changing or submitting it' },
   ],
   columns: ['status', 'noteId', 'title', 'body', 'topicNodes', 'topics', 'images', 'mediaType', 'videoPresent', 'video', 'cover', 'replacement', 'declarations', 'readback', 'submitted', 'snapshot', 'recovery'],
-  func: async (page, kwargs) => {
+  func: withOwnedTabCleanup(async (page, kwargs) => {
     const noteId = validateNoteId(kwargs['note-id']);
     const title = kwargs['dry-run'] ? String(kwargs.title ?? '').trim() : validateTitle(kwargs.title);
     const content = kwargs['dry-run'] ? String(kwargs.content ?? '').trim() : validateBody(kwargs.content);
@@ -210,5 +211,5 @@ cli({
       readback: video && !videoSourceChanged(before.video?.src, after.video?.src)
         ? 'saved fields match; replacement video version unconfirmed' : `verified observable fields via ${submitMethod}`,
     }];
-  },
+  }),
 });

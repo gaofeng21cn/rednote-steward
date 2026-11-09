@@ -7,6 +7,7 @@
  */
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { ArgumentError, AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 const MANAGER_URL = 'https://creator.xiaohongshu.com/new/note-manager';
 
@@ -74,7 +75,7 @@ cli({
     { name: 'limit', type: 'int', default: 50, help: 'Maximum unique notes to return (1-600)' },
   ],
   columns: ['rank', 'id', 'title', 'date', 'status', 'cover'],
-  func: async (page, kwargs) => {
+  func: withOwnedTabCleanup(async (page, kwargs) => {
     const limit = Number(kwargs.limit ?? 50);
     if (!Number.isInteger(limit) || limit < 1 || limit > 600) {
       throw new ArgumentError('limit must be an integer between 1 and 600');
@@ -126,5 +127,5 @@ cli({
       rank: index + 1,
       ...note,
     }));
-  },
+  }),
 });

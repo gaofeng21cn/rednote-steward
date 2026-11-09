@@ -22,7 +22,24 @@ const CAPABILITY_FILES = {
   editTextAndTopics: 'adapters/opencli/xiaohongshu/edit-note.js',
   replaceVideo: 'adapters/opencli/xiaohongshu/edit-note.js',
   sameNoteReadback: 'adapters/opencli/xiaohongshu/steward-read-note.js',
+  ownedTabCleanup: 'adapters/opencli/xiaohongshu/owned-tab.mjs',
 };
+
+const OWNED_TAB_MINIMUM_BRIDGE = '1.0.26';
+const OWNED_TAB_BRIDGE_REPAIR = 'Run xhs-ops setup --browser-extension to prepare the current Browser Bridge, then load or reload that version in chrome://extensions and repeat doctor.';
+function ownedTabBridgeCompatibility(version) {
+  const observed = typeof version === 'string' ? version.trim() : '';
+  const parts = /^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/.exec(observed);
+  if (!parts) return { state: 'unknown', minimumVersion: OWNED_TAB_MINIMUM_BRIDGE, observedVersion: null };
+  const values = parts.slice(1).map(value => Number(value || 0));
+  const minimum = [1, 0, 26, 0];
+  let comparison = 0;
+  for (let index = 0; index < minimum.length; index++) {
+    if (values[index] !== minimum[index]) { comparison = values[index] - minimum[index]; break; }
+  }
+  return { state: comparison >= 0 ? 'compatible' : 'unavailable', minimumVersion: OWNED_TAB_MINIMUM_BRIDGE,
+    observedVersion: observed };
+}
 
 const identityHash = value => createHash('sha256').update(String(value)).digest('hex');
 async function latestQualification({ home, account, build, browser }) {
@@ -123,6 +140,7 @@ export async function diagnose({ accountAlias, root = PACKAGE_ROOT, home = state
   const chosen = accountAlias ? selectedAccountReader(accountAlias) : null;
   const browserResult = await browserProbe(chosen?.profile);
   const browser = browserStatus(browserResult.json);
+  const ownedTabCompatibility = ownedTabBridgeCompatibility(browser.extensionVersion);
   const qualification = await latestQualification({ home, account: chosen, build, browser });
   const bound = accountReader();
   const accounts = await Promise.all(bound.map(item => accountReport(item, {
@@ -136,6 +154,8 @@ export async function diagnose({ accountAlias, root = PACKAGE_ROOT, home = state
     { name: 'contentDigest', status: build.content.digest ? 'computed' : 'unknown', ...build.content },
     { name: 'releaseManifest', status: build.manifest.matched ? 'matched' : build.manifest.present ? 'mismatch' : 'absent', ...build.manifest },
     { name: 'opencli', status: browserCheck, packageVersion: build.dependencies['@jackwener/opencli'] ?? null, browser },
+    { name: 'ownedTabCleanup', status: ownedTabCompatibility.state === 'unavailable' ? 'failed' : ownedTabCompatibility.state,
+      bridgeCompatibility: ownedTabCompatibility },
     { name: 'installationReceipt', status: installReceipt ? (installReceipt.version === build.version ? 'matched' : 'different') : 'unknown',
       version: installReceipt?.version ?? null, sourceRevision: installReceipt?.sourceRevision ?? null,
       contentDigest: installReceipt?.contentDigest ?? null, stateReceiptVersion: stateReceipt?.version ?? null },
@@ -147,6 +167,8 @@ export async function diagnose({ accountAlias, root = PACKAGE_ROOT, home = state
     catch { implementation = 'absent'; }
     return [name, { implementation, liveQualification: 'unknown' }];
   })));
+  capabilities.ownedTabCleanup.bridgeCompatibility = ownedTabCompatibility;
+  if (ownedTabCompatibility.state === 'unavailable') capabilities.ownedTabCleanup.repair = OWNED_TAB_BRIDGE_REPAIR;
   capabilities.accountIdentity = { implementation: 'present', liveQualification: accountAlias
     ? accounts.find(item => item.alias === accountAlias)?.identity.state === 'verified' ? 'supported' : 'unavailable' : 'unknown' };
   capabilities.readInventory = { implementation: 'present',
@@ -174,6 +196,7 @@ export async function diagnose({ accountAlias, root = PACKAGE_ROOT, home = state
     browser, selectedAccount: chosen?.alias ?? null, accounts, capabilities, qualification, checks,
     next: [
       ...(browserCheck === 'failed' ? ['Open the bound Chrome profile and enable Browser Bridge, then repeat doctor.'] : []),
+      ...(ownedTabCompatibility.state === 'unavailable' ? [OWNED_TAB_BRIDGE_REPAIR] : []),
       ...(accountAlias && selected?.identity.state !== 'verified' ? ['Sign in to the intended account and repeat account probe; retain its stable ID binding.'] : []),
       ...(accounts.some(item => item.owner.state === 'conflict') ? ['Inspect account status and its exact previous home before a controlled ownership transfer.'] : []),
       'Publishing, custom covers and edits remain unknown until an explicitly authorized platform operation is read back.',

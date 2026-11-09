@@ -1,6 +1,6 @@
 {
   "name": "rednote-steward",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Review exact RedNote task content, media and platform readback through the shared OPL MCP App.",
   "author": {
     "name": "OPL"

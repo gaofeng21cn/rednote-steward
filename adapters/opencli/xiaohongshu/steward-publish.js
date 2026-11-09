@@ -18,6 +18,7 @@ import {
   waitFor, waitForEditor, readEditor, fillTitle, fillBody, replaceTopics,
   normalizeForComparison, sameTopics, IMAGE_INPUT_SELECTOR,
 } from './editor-helpers.mjs';
+import { withOwnedTabCleanup } from './owned-tab.mjs';
 
 const VIDEO_INPUT = 'input[type="file"][accept*="video"], input[type="file"][accept*=".mp4"], input[type="file"][accept*=".mov"]';
 const PUBLISH_URL = 'https://creator.xiaohongshu.com/publish/publish?from=menu_left';
@@ -160,5 +161,5 @@ cli({
     { name: 'upload-timeout', type: 'int', default: 600, help: 'Upload/processing timeout in seconds' },
   ],
   columns: ['status', 'title', 'mediaType', 'imageCount', 'topics', 'media', 'cover', 'declarations', 'invocation', 'verification', 'submitted', 'snapshot', 'recovery'],
-  func: publishNote,
+  func: withOwnedTabCleanup(publishNote),
 });

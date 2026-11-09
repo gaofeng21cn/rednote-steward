@@ -1,0 +1,115 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { closeOwnedTab, withOwnedTabCleanup, configureOwnedTabRetention } from '../adapters/opencli/xiaohongshu/owned-tab.mjs';
+
+const page = (overrides = {}) => ({
+  session: 'site:xiaohongshu:profile-1',
+  surface: 'adapter',
+  contextId: 'context-7',
+  windowMode: 'background',
+  ...overrides,
+});
+
+test('closeOwnedTab sends only the exact adapter session context', async () => {
+  const calls = [];
+  const result = await closeOwnedTab(page(), {
+    sendCommand: async (...args) => { calls.push(args); return { closed: true }; },
+  });
+  assert.deepEqual(result, { closed: true });
+  assert.deepEqual(calls, [[ 'close-owned-tab', {
+    session: 'site:xiaohongshu:profile-1',
+    surface: 'adapter',
+    contextId: 'context-7',
+    windowMode: 'background',
+  } ]]);
+});
+
+test('closeOwnedTab skips missing, browser-owned, and non-Xiaohongshu sessions', async () => {
+  let calls = 0;
+  const sendCommand = async () => { calls++; };
+  assert.deepEqual(await closeOwnedTab({}, { sendCommand }), { skipped: 'no-adapter-session' });
+  assert.deepEqual(await closeOwnedTab(page({ surface: 'browser' }), { sendCommand }), { skipped: 'not-adapter-surface' });
+  assert.deepEqual(await closeOwnedTab(page({ surface: 'user' }), { sendCommand }), { skipped: 'not-adapter-surface' });
+  assert.deepEqual(await closeOwnedTab(page({ session: 'browser:profile-1' }), { sendCommand }),
+    { skipped: 'not-xiaohongshu-adapter-session' });
+  assert.deepEqual(await closeOwnedTab(page({ session: 'site:xiaohongshu:' }), { sendCommand }),
+    { skipped: 'not-xiaohongshu-adapter-session' });
+  assert.equal(calls, 0);
+});
+
+test('normal one-shot adapters clean up on success and preserve the result if cleanup reporting throws', async () => {
+  const closed = [];
+  const wrapped = withOwnedTabCleanup(async (_page, _kwargs) => ({ published: true }), {
+    close: async value => { closed.push(value); throw new Error('bridge cleanup failed'); },
+    report: () => { throw new Error('diagnostic sink failed'); },
+  });
+  assert.deepEqual(await wrapped(page(), {}), { published: true });
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].session, 'site:xiaohongshu:profile-1');
+});
+
+test('normal one-shot adapters preserve the original operation error over cleanup and diagnostics errors', async () => {
+  const original = new Error('platform write outcome is unknown');
+  let reports = 0;
+  const wrapped = withOwnedTabCleanup(async () => { throw original; }, {
+    close: async () => { throw new Error('bridge cleanup failed'); },
+    report: () => { reports++; throw new Error('diagnostic sink failed'); },
+  });
+  await assert.rejects(wrapped(page(), {}), error => error === original);
+  assert.equal(reports, 1);
+});
+
+for (const [name, kwargs] of [
+  ['prepare-only boolean', { 'prepare-only': true }],
+  ['prepare-only string', { 'prepare-only': 'true' }],
+  ['keep-tab boolean', { 'keep-tab': true }],
+  ['keepTab alias', { keepTab: true }],
+]) {
+  test(`explicit ${name} skips owned-tab cleanup`, async () => {
+    let closes = 0;
+    const wrapped = withOwnedTabCleanup(async () => 'prepared', { close: async () => { closes++; } });
+    assert.equal(await wrapped(page(), kwargs), 'prepared');
+    assert.equal(closes, 0);
+  });
+}
+
+test('persistent browser sessions and runner keep-tab runtime signal are retained', async () => {
+  let closes = 0;
+  const persistent = withOwnedTabCleanup(async () => 'ok', {
+    close: async () => { closes++; }, env: {},
+  });
+  const runtimeKeep = withOwnedTabCleanup(async () => 'ok', {
+    close: async () => { closes++; },
+    env: { REDNOTE_STEWARD_KEEP_TAB: '1' },
+  });
+  assert.equal(await persistent(page({ siteSession: 'persistent' }), {}), 'ok');
+  assert.equal(await runtimeKeep(page(), {}), 'ok');
+  assert.equal(closes, 0);
+});
+
+test('an explicitly false keep-tab signal still cleans up', async () => {
+  let closes = 0;
+  const wrapped = withOwnedTabCleanup(async () => 'ok', {
+    close: async () => { closes++; },
+    env: { REDNOTE_STEWARD_KEEP_TAB: '0' },
+  });
+  await wrapped(page(), { 'keep-tab': false, 'prepare-only': false });
+  assert.equal(closes, 1);
+});
+
+test('runtime retention follows common options and resets inherited signals', async () => {
+  const command = { args: [{name:'title',required:true}, {name:'content'}, {name:'prepare-only',type:'bool'}] };
+  const env = { REDNOTE_STEWARD_KEEP_TAB: '1' };
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id','--keep-tab','true'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '1');
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id','--keep-tab=false'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '0');
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id','--site-session=persistent','--keep-tab','false'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '1');
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id','--title','--keep-tab','true'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '0');
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id','--','--keep-tab','true'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '0');
+  configureOwnedTabRetention(['xiaohongshu','edit-note','id'], command, env);
+  assert.equal(env.REDNOTE_STEWARD_KEEP_TAB, '0');
+});
