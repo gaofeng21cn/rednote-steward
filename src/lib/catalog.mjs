@@ -196,7 +196,10 @@ export function catalogReceipts(db, { account, accountUserId, limit = 100 } = {}
   }
   const rows = db.prepare(`SELECT * FROM catalog_receipts ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY created_at DESC,id DESC LIMIT ?`).all(...params, limit);
-  return { ok: true, receipts: rows.map(row => ({ ...row, payload: JSON.parse(row.payload_json) })) };
+  return { ok: true, receipts: rows.map(row => {
+    const { payload_json, ...receipt } = row;
+    return { ...receipt, payload: JSON.parse(payload_json) };
+  }) };
 }
 
 export function upsertSeries(db, { account, accountUserId, seriesId, title, description = '', expectedEpisodes = [] }) {

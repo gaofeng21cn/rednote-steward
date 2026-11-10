@@ -249,7 +249,7 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:e2d4ab162a6fcdff0a70e4f4cb1d006dbd5431808767534c47d7bc2c67215557"
+    "digest": "sha256:a37809d9c48fddc77b65ecfb65c3ae6c463b398fb2db1417ea20e4fa73960ed5"
   },
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "presentation": {
