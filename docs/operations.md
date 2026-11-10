@@ -122,6 +122,15 @@ After importing, reconcile an unresolved historical task and inspect a current `
 
 Use `xhs-ops media-info FILE --ffprobe` for optional deterministic media metadata. Missing `ffprobe` is reported as unavailable; it does not mean the file was decoded or accepted by the platform.
 
+Compare an approved local video with a downloaded platform readback before treating a resource-path change as a content update:
+
+```bash
+xhs-ops media-compare /absolute/local.mp4 /absolute/platform-readback.mp4 \
+  --output ./platform-video-comparison.json
+```
+
+The command checks SHA-256, duration, full-duration visual SSIM sampled at two frames per second and normalized stereo audio PSNR. Platform transcoding can change bytes and resource paths, so byte identity is reported separately. A `match` covers content agreement only; it does not prove platform review or public visibility.
+
 ## New-machine check
 
 `xhs-ops doctor --json` reports the installed package and source revision where available, state root and schema, OpenCLI/Browser Bridge versions, configured Chrome profile, account identity check and capability evidence. `supported` means that capability was exercised in the reported environment; `unknown` means it has not been qualified. A present executable or running MCP process alone does not prove login or publishing readiness. Use `doctor --redact` for a shareable result; it removes private paths, UIDs, profiles and raw errors.
