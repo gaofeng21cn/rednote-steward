@@ -216,6 +216,20 @@ tool('legacy_import', 'Preview or explicitly import a known legacy ledger as his
 tool('media_info', 'Inspect local dimensions, container and optional ffprobe streams without altering approved media.', {
   path: packagePath, ffprobe: z.boolean().default(false),
 }, ({ path, ffprobe }) => callCli(['media-info',path,...(ffprobe ? ['--ffprobe'] : [])]));
+tool('media_compare', 'Compare approved video bytes with a downloaded platform readback using full-duration visual, audio and duration checks.', {
+  localPath: packagePath,
+  platformPath: packagePath,
+  ssimThreshold: z.number().min(0).max(1).default(0.995),
+  audioPsnrThreshold: z.number().min(0).default(30),
+  durationTolerance: z.number().min(0).default(0.25),
+  evidenceDirectory: packagePath.optional(),
+}, ({ localPath, platformPath, ssimThreshold, audioPsnrThreshold, durationTolerance, evidenceDirectory }) => callCli([
+  'media-compare', localPath, platformPath,
+  '--ssim-threshold', String(ssimThreshold),
+  '--audio-psnr-threshold', String(audioPsnrThreshold),
+  '--duration-tolerance', String(durationTolerance),
+  ...(evidenceDirectory ? ['--evidence-dir', evidenceDirectory] : []),
+]));
 tool('backend_qualify', 'Benchmark read-only identity and inventory probes for the explicitly selected local backend. Publishing capabilities remain untested.', {
   account, backendLabel: z.string().default('bundled'), repeats: z.number().int().min(1).max(20).default(3), limit,
 }, ({ account, backendLabel, repeats, limit }) => callCli(['qualify','--account',account,'--backend-label',backendLabel,'--repeats',String(repeats),'--limit',String(limit)]), { readOnly: false, browser: true });

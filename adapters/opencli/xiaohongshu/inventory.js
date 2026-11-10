@@ -103,7 +103,6 @@ cli({
 
     const notes = new Map();
     let stagnantRounds = 0;
-    let exhausted = false;
     for (let round = 0; round < 160 && notes.size < limit; round += 1) {
       const batch = await page.evaluate(extractCardsScript());
       if (!Array.isArray(batch)) {
@@ -117,18 +116,12 @@ cli({
 
       if (notes.size > previousSize) stagnantRounds = 0;
       else stagnantRounds += 1;
-      if (stagnantRounds >= 4) {
-        exhausted = true;
-        break;
-      }
+      if (stagnantRounds >= 4) break;
       if (total != null && notes.size >= total) break;
 
       const scroll = await page.evaluate(scrollManagerScript());
-      if (!scroll?.found) {
-        // Small and empty accounts do not need a scroll container.
-        exhausted = true;
-        break;
-      }
+      // A missing scroll container bounds the read, but does not prove total.
+      if (!scroll?.found) break;
       await page.wait({ time: 1.1 });
     }
 
@@ -138,7 +131,11 @@ cli({
         return elements.some(element => element.offsetParent !== null &&
           /暂无笔记|还没有.*笔记|没有发布.*笔记/.test(element.innerText || ''));
       })()`);
-      if (empty) return [];
+      if (empty && (total === 0 || total === null)) {
+        return kwargs['include-meta']
+          ? { notes: [], total: 0, returned: 0, complete: true, truncated: false, requestedLimit: limit }
+          : [];
+      }
       throw new CommandExecutionError(
         'No creator note cards loaded',
         'Confirm the account is logged in and the note manager is available.',
@@ -149,15 +146,15 @@ cli({
       ...note,
     }));
     if (!kwargs['include-meta']) return result;
-    const complete = total != null
-      ? result.length >= total
-      : exhausted && result.length < limit;
+    // A missing total is an unknown boundary, even when the virtual list
+    // stopped locally. Never present bounded observation as account completeness.
+    const complete = total != null && result.length >= total;
     return {
       notes: result,
       total,
       returned: result.length,
       complete,
-      truncated: total != null ? result.length < total : !complete,
+      truncated: total == null || result.length < total,
       requestedLimit: limit,
     };
   }),
