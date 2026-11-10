@@ -31,6 +31,7 @@ test('standard MCP handshake, tools, resources and shared CLI account state', as
     const tools = await client.listTools();
     assert.ok(tools.tools.some((tool) => tool.name === 'task_execute'));
     assert.ok(tools.tools.some((tool) => tool.name === 'task_reconcile'));
+    assert.ok(tools.tools.some((tool) => tool.name === 'media_compare'));
     const resources = await client.listResources();
     assert.ok(resources.resources.some((r) => r.uri === 'rednote://capabilities'));
     const capabilities = await client.readResource({ uri: 'rednote://capabilities' });

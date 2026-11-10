@@ -124,6 +124,15 @@ xhs-ops import-legacy ./old-ledger.json --account travel --target "$HOME/.local/
 
 导入后先核对未决历史任务，再对当前 `post.json` 执行 inspect，不能直接把旧指纹或旧素材路径当成新的发布包。`xhs-ops media-info FILE --ffprobe` 可读取确定性媒体元数据；没有 ffprobe 时会明确报告 unavailable，不代表文件已经解码或平台接受。
 
+平台资源路径变化时，先下载同 ID 回读视频，再与已批准的本机视频做内容比较：
+
+```bash
+xhs-ops media-compare /绝对路径/本机成片.mp4 /绝对路径/平台回读.mp4 \
+  --output ./平台视频比较.json
+```
+
+命令校验 SHA-256、时长、全片 2 fps 画面 SSIM 和标准化双声道音频 PSNR。平台转码会改变字节与资源路径，因此字节一致性单独报告。`match` 只表示内容一致，不代表平台审核通过或已经公开可见。
+
 ## 新机器验收
 
 `xhs-ops doctor --json` 显示可获得的安装包与源码版本、状态目录和 schema、OpenCLI/Browser Bridge 版本、Chrome profile、账号身份检查及逐项能力证据。`supported` 表示该环境实际测过该能力；`unknown` 表示尚未资格验证。命令存在或 MCP 进程运行都不能单独证明账号已登录或具备发布能力。需要分享诊断结果时使用 `doctor --redact`，它会去掉私有路径、UID、profile 和原始错误。

@@ -24,7 +24,7 @@ function parseArgs(argv, command) {
     const separator = token.indexOf('=');
     const key = token.slice(2, separator < 0 ? undefined : separator);
     if (separator >= 0) { options[key] = token.slice(separator + 1); continue; }
-    if (flags.has(key) && !(key === 'status' && command !== 'setup')) { options[key] = true; continue; }
+    if (flags.has(key) && !(key === 'status' && command !== 'setup') && !(key === 'ffprobe' && command === 'media-compare')) { options[key] = true; continue; }
     const next = argv[index + 1];
     if (!next || next.startsWith('--')) throw new Error(`--${key} requires a value`);
     options[key] = next; index++;
@@ -89,6 +89,7 @@ Usage:
   xhs-ops restore BACKUP_DIRECTORY [--target EMPTY_DIRECTORY] [--path-mappings JSON] [--apply]
   xhs-ops import-legacy SOURCE --account ALIAS [--source-account OLD_ALIAS] [--target DIRECTORY] [--path-mappings JSON] [--expected-digest HASH --apply]
   xhs-ops media-info FILE [--ffprobe]
+  xhs-ops media-compare LOCAL_APPROVED PLATFORM_READBACK [--output FILE]
   xhs-ops qualify --account ALIAS [--backend-label LABEL] [--repeats N] [--limit N]
   xhs-ops compare-qualifications FILE...
   xhs-ops audit --account ALIAS [--limit 120]
@@ -217,6 +218,29 @@ export async function main(argv = process.argv.slice(2)) {
     result = options.apply ? await applyLegacyImport(input) : await previewLegacyImport(input);
   }
   else if (command === 'media-info') result = { ok: true, metadata: await inspectMediaMetadata(path.resolve(requireValue(positionals[0], 'media-info FILE')), { ffprobe: Boolean(options.ffprobe) }) };
+  else if (command === 'media-compare') {
+    if (positionals.length < 2) {
+      throw new Error('Usage: xhs-ops media-compare LOCAL_APPROVED PLATFORM_READBACK');
+    }
+    const { compareVideoFiles } = await import('./lib/video-compare.mjs');
+    result = await compareVideoFiles(
+      path.resolve(positionals[0]),
+      path.resolve(positionals[1]),
+      {
+        ssimThreshold: options['ssim-threshold'],
+        audioPsnrThreshold: options['audio-psnr-threshold'],
+        durationTolerance: options['duration-tolerance'],
+        ffmpeg: options.ffmpeg,
+        ffprobe: options.ffprobe,
+        evidenceDirectory: options['evidence-dir'] || (options.output ? `${path.resolve(options.output)}.frames` : undefined),
+      },
+    );
+    if (options.output) {
+      const output = path.resolve(options.output);
+      result = { ...result, output };
+      await fs.writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    }
+  }
   else if (command === 'qualify') {
     const { qualifyBackend } = await import('./lib/qualification.mjs');
     result = await qualifyBackend({ accountAlias: requireValue(options.account, 'qualify --account ALIAS'), backendLabel: options['backend-label'] || 'bundled', repeats: integer(options.repeats, 3, 20), limit: integer(options.limit, 30, 1000) });
