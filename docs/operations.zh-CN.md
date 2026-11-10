@@ -147,3 +147,17 @@ OpenCLI、Browser Bridge 和账号能力随 release manifest 记录。升级后�
 xhs-ops qualify --account travel --backend-label bundled --repeats 3
 xhs-ops compare-qualifications ./qualification-a.json ./qualification-b.json
 ```
+
+
+## 历史封面证据与任务替代
+
+旧视频编辑缺少封面选择事件时，应保留“事件缺失”的事实。先下载同一笔记当前回读的封面，再生成绑定到任务的内容回执：
+
+```bash
+xhs-ops cover-evidence TASK_ID --note-id NOTE_ID --platform-cover ./saved-cover.jpg --output ./cover-evidence.json
+xhs-ops link-existing TASK_ID --note-id NOTE_ID --reason "核实历史保存封面" --cover-evidence ./cover-evidence.json
+```
+
+两条命令均沿既有浏览器 profile 核对稳定账号。read-note 适配器在该浏览器上下文读取当前封面摘要，只接受平台 HTTPS 域，限制 20 MiB 和 30 秒；本地保存的平台封面必须与这些字节相同。工具重算冻结封面哈希、任务指纹、账号、笔记、当前 URL 和图像相似度。字节一致可直接通过；转码图片需宽高比兼容，固定归一化后 SSIM 至少为 0.995，并需本机具备 ffmpeg、ffprobe。工具缺失、下载失败、绑定过期或低分均保持未解决。回执保留在私有本地，不证明平台审核或公开可见，也不会伪造点击和提交历史。
+
+对于确实由新记录取代的历史重复任务，可执行 `xhs-ops supersede OLD_TASK --replacement-task VERIFIED_TASK --reason "当前记录取代导入的旧任务"`。替代任务必须已核验通过，并指向同一稳定账号、浏览器 profile 与精确笔记；再次只读核对时，平台内容仍须与其已保存回读一致，两个任务均不能存在活跃写入者。superseded 保留原任务未通过的核验和替代关系，只解除这条历史责任，不把它改成 verified，也不授权重试。没有原始 note ID 的未知发布仍保持未解决。CLI 与 MCP 共用相同控制器和账号锁。

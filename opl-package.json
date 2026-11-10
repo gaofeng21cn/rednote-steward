@@ -201,6 +201,7 @@
       "src/lib/catalog.mjs",
       "src/lib/config.mjs",
       "src/lib/controller.mjs",
+      "src/lib/cover-evidence.mjs",
       "src/lib/db.mjs",
       "src/lib/health.mjs",
       "src/lib/lineage.mjs",
@@ -217,6 +218,6 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:a9d16360288862b7137295a1ed0efdbec0e87daf2ebf8205c7aff3f0ec8972f9"
+    "digest": "sha256:249268d4ca92778b0388ff07d92960cec19fa8c01c0d1be332cfe4a82898fd7c"
   }
 }

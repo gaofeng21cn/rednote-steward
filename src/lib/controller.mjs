@@ -10,6 +10,7 @@ import { inspectPackage, verifyFrozenPackage, normalizeText } from './package.mj
 import { publishArgs, editArgs, readInventory, readNote, readMetrics, runOpencli, verifiedIdentity, rowOf } from './opencli.mjs';
 import { auditRows, reviewCandidates } from './audit.mjs';
 import { videoSourceChanged, videoSourceIdentity } from './media.mjs';
+import { createCoverEvidence, verifyCoverEvidence } from './cover-evidence.mjs';
 import { acquireAccountWrite, resolveAccountWrite } from './owner.mjs';
 import { importInventory, catalogNotes, updateCatalogNote, upsertSeries, seriesOverview,
   inspectionCandidates, getAccountPolicy, setAccountPolicy, getInspectionCursor, setInspectionCursor } from './catalog.mjs';
@@ -89,7 +90,7 @@ function stagedPublication(task, events, publication) {
     ...(prepared?.preCoverSource ? { preCoverSource: prepared.preCoverSource } : {}),
     ...(attempted ? { submissionAttempted: true } : {}) } };
 }
-export function compareReadback(task, row, publication = null) {
+export function compareReadback(task, row, publication = null, coverContentEvidence = null) {
   const expectedId = task.platform_note_id || task.source_note_id;
   const topics = Array.isArray(row?.topics) ? row.topics : [];
   const expectedTopics = [...task.topics].sort();
@@ -143,13 +144,19 @@ export function compareReadback(task, row, publication = null) {
   } else {
     checks.media = Boolean(baseline && row?.verification?.imageCount === true && row.imageCount === baseline.imageCount && row.mediaType === baseline.mediaType);
   }
+  const contentCoverMatched = Boolean(task.cover && coverContentEvidence?.comparison?.matched === true
+    && coverContentEvidence.taskId === task.id && coverContentEvidence.fingerprint === task.fingerprint
+    && coverContentEvidence.accountUserId === task.account_user_id && coverContentEvidence.noteId === row?.noteId
+    && coverContentEvidence.local?.sha256 === task.cover.sha256 && coverContentEvidence.platform?.url === row?.cover?.url);
+  if (task.cover && coverContentEvidence) checks.customCover = contentCoverMatched;
   return {
     matched: Object.values(checks).every(Boolean), checks,
+    ...(coverContentEvidence ? { coverContentEvidence } : {}),
     scope: 'Observable title, body, native topics, media presence/count and changed video resource for replacements',
     limits: { mediaBytes: 'not-compared', imageOrder: 'platform-urls-only',
       videoReplacement: task.kind === 'edit' && task.video
         ? (checks.videoReplacement ? 'saved-source-changed; bytes-not-compared' : 'unconfirmed') : 'not-requested',
-      customCover: task.cover ? (checks.customCover
+      customCover: task.cover ? (contentCoverMatched ? 'current-platform-content-recomputed' : checks.customCover
         ? task.kind === 'edit' ? 'selection-confirmed-and-saved-resource-changed; transformed-bytes-not-compared' : 'selection-confirmed-and-cover-present'
         : 'not-confirmed') : 'not-requested',
       declarations: expectedDeclarations ? (checks.declarations ? 'saved-composer-controls-match' : 'saved fields unconfirmed') : 'not-requested',
@@ -236,7 +243,7 @@ export class Controller {
     return this.withDatabase(db => transaction(db, () => {
       const duplicate = db.prepare(`SELECT id, state, batch_id FROM tasks WHERE account_user_id = ? AND kind = ?
         AND fingerprint = ? AND COALESCE(source_note_id,'') = COALESCE(?,'')
-        AND state NOT IN ('cancelled','failed') LIMIT 1`).get(account.userId, content.kind, content.fingerprint, content.sourceNoteId);
+        AND state NOT IN ('cancelled','superseded','failed') LIMIT 1`).get(account.userId, content.kind, content.fingerprint, content.sourceNoteId);
       if (duplicate) {
         let assigned = false;
         if (batchId && !duplicate.batch_id && ['draft','queued'].includes(duplicate.state)) {
@@ -445,11 +452,12 @@ export class Controller {
     }
     return null;
   }
-  async completeReadback(task, noteId, publication = null, { reservation = null } = {}) {
+  async completeReadback(task, noteId, publication = null, { reservation = null, coverEvidence = null } = {}) {
     checkNoteId(noteId);
     const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
-    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Note readback'));
-    const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
+    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType, { coverHash: Boolean(coverEvidence) }), 'Note readback'));
+    const coverContentEvidence = coverEvidence ? await verifyCoverEvidence(coverEvidence, { ...task, platform_note_id: noteId }, row) : null;
+    const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication, coverContentEvidence);
     const state = verification.matched ? 'verified'
       : task.kind === 'edit' && task.cover ? 'needs_review' : 'submitted';
     const error = verification.matched ? null : 'Submission located; some requested fields still need review';
@@ -717,11 +725,11 @@ export class Controller {
         ? `Inspect the cover on this same note and keep the saved video. Read back with xhs-ops reconcile ${id} before another submission. Without recorded selected-cover source evidence, the cover remains needs_review.`
         : `After completing this exact package manually, link its note ID with xhs-ops link-existing ${id} --note-id NOTE_ID --reason TEXT.` };
   }
-  async linkExisting(id, { noteId, reason } = {}) {
+  async linkExisting(id, { noteId, reason, coverEvidence = null } = {}) {
     checkNoteId(noteId);
     if (!String(reason || '').trim()) throw new Error('A reason describing the manual publication or existing-note match is required');
     const { task, events } = this.show(id);
-    if (task.state === 'cancelled') throw new Error('A cancelled task cannot be linked; select the intended active task');
+    if (['cancelled', 'superseded'].includes(task.state)) throw new Error('A cancelled or superseded task cannot be linked; select the intended active task');
     if (activeProcess(task.runner_pid) || activeProcess(task.adapter_pid)) throw new Error('The task worker or browser writer is still running');
     if (task.kind === 'edit' && task.source_note_id !== noteId) throw new Error('An edit must link the original note ID');
     if (task.platform_note_id && task.platform_note_id !== noteId) throw new Error('This task is already linked to a different platform note');
@@ -739,7 +747,7 @@ export class Controller {
     await verifiedIdentity(account);
     const publication = stagedPublication(task, events);
     const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
-    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType), 'Manual publication readback'));
+    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType, { coverHash: Boolean(coverEvidence) }), 'Manual publication readback'));
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication);
     if (!verification.checks.noteId || !verification.checks.title || !verification.checks.body || !verification.checks.topics) {
       throw new Error('The specified note does not match this account task’s frozen title, body and native topics');
@@ -750,7 +758,7 @@ export class Controller {
       const current = db.prepare('SELECT state,phase FROM tasks WHERE id=?').get(id);
       if (current.state !== 'needs_review' || current.phase !== reservation) throw new Error('Manual linkage reservation changed; inspect the current task');
     });
-    const completed = await this.completeReadback(task, noteId, publication, { reservation });
+    const completed = await this.completeReadback(task, noteId, publication, { reservation, coverEvidence });
     if (completed.state === 'verified') resolveAccountWrite({ accountUserId: account.userId, browserProfile: account.profile,
       home: this.root, taskId: id, reason: 'Manually identified note matched by same-note platform readback' });
     return { ...completed, source: 'manual-link', publishedByThisCall: false };
@@ -762,6 +770,55 @@ export class Controller {
       }));
       throw error;
     }
+  }
+  async coverEvidence(id, { noteId, platformCover } = {}) {
+    noteId = checkNoteId(noteId);
+    const { task } = this.show(id);
+    if (['cancelled', 'superseded'].includes(task.state)) throw new Error('Select an active task for cover evidence');
+    if (task.kind === 'edit' && task.source_note_id !== noteId || task.platform_note_id && task.platform_note_id !== noteId) {
+      throw new Error('Cover evidence must use the exact original note');
+    }
+    const account = this.frozenAccount(task);
+    await verifiedIdentity(account);
+    const row = rowOf(resultData(await readNote(noteId, account.profile, 'video', { coverHash: true }), 'Cover evidence readback'));
+    if (!row.coverContent?.sha256 || row.coverContent.bytes <= 0) throw new Error('Bound browser could not produce current cover bytes');
+    const verification = compareReadback({ ...task, platform_note_id: noteId }, row);
+    if (!verification.checks.noteId || !verification.checks.title || !verification.checks.body || !verification.checks.topics) {
+      throw new Error('Cover evidence note does not match the frozen task');
+    }
+    return createCoverEvidence({ ...task, platform_note_id: noteId }, row, platformCover);
+  }
+  async supersede(id, { replacementId, reason } = {}) {
+    if (!replacementId || replacementId === id || !String(reason || '').trim()) throw new Error('An exact replacement task and supersession reason are required');
+    const { task } = this.show(id), { task: replacement } = this.show(replacementId);
+    if (!['draft', 'queued', 'paused', 'failed', 'submitted', 'needs_review', 'superseded'].includes(task.state)) throw new Error('Active or verified tasks cannot be superseded');
+    if (activeProcess(task.runner_pid) || activeProcess(task.adapter_pid) || activeProcess(replacement.runner_pid) || activeProcess(replacement.adapter_pid)) throw new Error('A task worker or browser writer is still running');
+    const noteId = task.platform_note_id || task.source_note_id;
+    if (!noteId || replacement.platform_note_id !== noteId || replacement.account_user_id !== task.account_user_id || replacement.browser_profile !== task.browser_profile ||
+        replacement.state !== 'verified' || replacement.verification?.matched !== true || replacement.readback?.noteId !== noteId) {
+      throw new Error('Supersession requires a verified replacement for the same account and exact note');
+    }
+    const account = this.frozenAccount(task); this.frozenAccount(replacement);
+    await verifiedIdentity(account);
+    const noteType = replacement.video || replacement.cover || replacement.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
+    const row = rowOf(resultData(await readNote(noteId, account.profile, noteType), 'Replacement note readback'));
+    if (!unchangedNote(replacement.readback, row)) throw new Error('The replacement note changed or its saved readback is incomplete; reconcile it first');
+    this.withDatabase(db => transaction(db, () => {
+      const current = rowToTask(db.prepare('SELECT * FROM tasks WHERE id=?').get(id));
+      const successor = rowToTask(db.prepare('SELECT * FROM tasks WHERE id=?').get(replacementId));
+      if (reviewRevision(current) !== reviewRevision(task) || reviewRevision(successor) !== reviewRevision(replacement)) throw new Error('Task changed during supersession; inspect the current tasks');
+      if (task.state === 'superseded') {
+        const previous = db.prepare("SELECT payload_json FROM events WHERE task_id=? AND event='superseded' ORDER BY id DESC LIMIT 1").get(id);
+        if (JSON.parse(previous?.payload_json || '{}').replacementId !== replacementId) throw new Error('This task has a different recorded replacement');
+      } else {
+        db.prepare("UPDATE tasks SET state='superseded',updated_at=? WHERE id=?").run(now(), id);
+        addEvent(db, id, 'superseded', { replacementId, replacementFingerprint: replacement.fingerprint, noteId,
+          reason: String(reason).trim(), previousState: task.state, verified: false, currentNoteReadAt: now() });
+      }
+    }));
+    resolveAccountWrite({ accountUserId: account.userId, browserProfile: account.profile, home: this.root, taskId: id,
+      reason: `Exact note is owned by verified replacement ${replacementId}; original task is superseded, not verified` });
+    return { ok: true, taskId: id, state: 'superseded', replacementId, platformNoteId: noteId, verified: false, publishedByThisCall: false };
   }
   async collect(alias, limit = 120, { audit = false } = {}) {
     const account = getAccount(alias);

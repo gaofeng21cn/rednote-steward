@@ -575,3 +575,69 @@ test('prepared edits remain unresolved until explicit composer inspection and un
   assert.equal(cleared.json.retryRequiresAuthorization, true);
   assert.equal((await platform(f.env)).writes, 0);
 });
+
+
+test('historical cover recovery recomputes content without manufacturing old operation events', async t => {
+  const f = await videoEdit(t, { coverOnly: true });
+  await command(['run', f.id], { ...f.env, FAKE_MODE: 'cover-only-no-evidence' });
+  const before = (await command(['show', f.id], f.env)).json;
+  const platformCover = before.task.cover.path;
+  const env = { ...f.env, FAKE_COVER_FILE: platformCover };
+  const receipt = path.join(f.root, 'cover-evidence.json');
+  const created = await command(['cover-evidence', f.id, '--note-id', f.noteId, '--platform-cover', platformCover, '--output', receipt], env);
+  assert.equal(created.code, 0, created.stderr);
+  assert.equal(created.json.comparison.matched, true);
+  const linked = await command(['link-existing', f.id, '--note-id', f.noteId, '--reason', 'Verified saved cover content', '--cover-evidence', receipt], env);
+  assert.equal(linked.json.state, 'verified', JSON.stringify(linked));
+  assert.equal(linked.json.verification.limits.customCover, 'current-platform-content-recomputed');
+  assert.equal(linked.json.verification.checks.videoPreserved, true);
+  const after = (await command(['show', f.id], env)).json;
+  assert.equal(after.events.filter(e => e.event === 'phase').length, before.events.filter(e => e.event === 'phase').length);
+  assert.equal((await platform(env)).writes, 1);
+});
+
+test('missing bound cover bytes leave historical recovery unresolved', async t => {
+  const f = await videoEdit(t, { coverOnly: true });
+  await command(['run', f.id], { ...f.env, FAKE_MODE: 'cover-only-no-evidence' });
+  const task = (await command(['show', f.id], f.env)).json.task;
+  const result = await command(['cover-evidence', f.id, '--note-id', f.noteId, '--platform-cover', task.cover.path, '--output', path.join(f.root, 'receipt.json')], f.env);
+  assert.notEqual(result.code, 0); assert.match(result.stderr, /bound browser|Bound browser/);
+  assert.equal((await command(['show', f.id], f.env)).json.task.state, 'needs_review');
+  assert.equal((await platform(f.env)).writes, 1);
+});
+
+test('supersession retires only a historical task with a fresh verified same-note replacement', async t => {
+  const f = await videoEdit(t, { coverOnly: true });
+  assert.equal((await command(['run', f.id], f.env)).json.state, 'verified');
+  const oldDir = await f.content('Historical edition', { kind: 'edit', sourceNoteId: f.noteId, images: [], cover: 'image.png' });
+  const old = (await command(['ingest', oldDir], f.env)).json.taskId;
+  const db = openDatabase(path.join(f.env.XHS_OPS_HOME, 'xhs-ops.sqlite'));
+  db.prepare("UPDATE tasks SET state='needs_review',verification_json=?,platform_note_id=? WHERE id=?").run(JSON.stringify({ matched: false }), f.noteId, old); db.close();
+  const queued = await f.queued('Next unrelated note');
+  assert.match((await command(['run', queued.id], f.env)).stderr, /Account is blocked/);
+  const retired = await command(['supersede', old, '--replacement-task', f.id, '--reason', 'Imported duplicate is covered by the verified current task'], f.env);
+  assert.equal(retired.json.state, 'superseded', JSON.stringify(retired)); assert.equal(retired.json.verified, false);
+  const history = (await command(['show', old], f.env)).json;
+  assert.equal(history.task.verification.matched, false);
+  assert.equal(history.events.filter(e => e.event === 'superseded').length, 1);
+  const repeated = await command(['supersede', old, '--replacement-task', f.id, '--reason', 'Same retirement'], f.env);
+  assert.equal(repeated.json.state, 'superseded', JSON.stringify(repeated));
+  assert.equal((await command(['show', old], f.env)).json.events.filter(e => e.event === 'superseded').length, 1);
+  assert.notEqual((await command(['approve', old], f.env)).code, 0);
+  assert.equal((await command(['run', queued.id], f.env)).json.state, 'verified');
+});
+
+test('supersession rejects a changed platform note or an unverified successor', async t => {
+  const f = await videoEdit(t, { coverOnly: true });
+  await command(['run', f.id], f.env);
+  const oldDir = await f.content('Old edition', { kind: 'edit', sourceNoteId: f.noteId, images: [] });
+  const old = (await command(['ingest', oldDir], f.env)).json.taskId;
+  const state = await platform(f.env); state.notes[0].cover.url += '-changed';
+  await fs.writeFile(f.env.FAKE_OPENCLI_STATE, JSON.stringify(state));
+  const changed = await command(['supersede', old, '--replacement-task', f.id, '--reason', 'Incorrect assumption'], f.env);
+  assert.notEqual(changed.code, 0); assert.match(changed.stderr, /replacement note changed/);
+  assert.equal((await command(['show', old], f.env)).json.task.state, 'draft');
+  const other = await f.queued('Unverified successor');
+  const unavailable = await command(['supersede', old, '--replacement-task', other.id, '--reason', 'Unverified successor'], f.env);
+  assert.notEqual(unavailable.code, 0); assert.match(unavailable.stderr, /verified replacement/);
+});
