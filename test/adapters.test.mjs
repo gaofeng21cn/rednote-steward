@@ -145,16 +145,42 @@ test('media readiness requires actual video source, not an empty element', () =>
 
 test('inventory accepts a genuinely empty creator account', async () => {
   const command = getRegistry().get('xiaohongshu/inventory');
-  const answers = ['https://creator.xiaohongshu.com/new/note-manager', [], { found: false }, true];
+  const answers = ['https://creator.xiaohongshu.com/new/note-manager', 0, [], true];
   const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
   assert.deepEqual(await command.func(page, { limit: 30 }), []);
 });
 
 test('inventory does not mistake a missing page or login for an empty account', async () => {
   const command = getRegistry().get('xiaohongshu/inventory');
-  const answers = ['https://creator.xiaohongshu.com/new/note-manager', [], { found: false }, false];
+  const answers = ['https://creator.xiaohongshu.com/new/note-manager', 0, [], false];
   const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
   await assert.rejects(command.func(page, { limit: 30 }), /No creator note cards loaded/);
+});
+
+test('inventory reports partial coverage instead of treating the requested limit as the account total', async () => {
+  const command = getRegistry().get('xiaohongshu/inventory');
+  const first = { id: 'a'.repeat(24), title: 'First', date: '2026-01-01 00:00', cover: '', status: 'unknown' };
+  const second = { id: 'b'.repeat(24), title: 'Second', date: '2026-01-02 00:00', cover: '', status: 'unknown' };
+  const answers = ['https://creator.xiaohongshu.com/new/note-manager', 808, [first, second]];
+  const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
+  const result = await command.func(page, { limit: 2, 'include-meta': true });
+  assert.equal(result.total, 808);
+  assert.equal(result.returned, 2);
+  assert.equal(result.complete, false);
+  assert.equal(result.truncated, true);
+  assert.equal(result.requestedLimit, 2);
+});
+
+test('inventory accepts a limit above the former 600-note ceiling', async () => {
+  const command = getRegistry().get('xiaohongshu/inventory');
+  const note = { id: 'c'.repeat(24), title: 'Only one', date: '2026-01-01 00:00', cover: '', status: 'unknown' };
+  const answers = ['https://creator.xiaohongshu.com/new/note-manager', 1, [note]];
+  const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
+  const result = await command.func(page, { limit: 1000, 'include-meta': true });
+  assert.equal(result.total, 1);
+  assert.equal(result.complete, true);
+  assert.equal(result.truncated, false);
+  assert.equal(result.notes.length, 1);
 });
 
 function videoEditor({ inputCount = 1, uploadError = null, image = false, durationAfterUpload = 65.13 } = {}) {

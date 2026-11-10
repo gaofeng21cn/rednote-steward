@@ -62,8 +62,15 @@ export function runOpencli(args, { timeoutMs = 300_000, profile, onSpawn, onProg
 export function readAccount(profile) {
   return runOpencli(['xiaohongshu', 'steward-account', ...browserArgs], { timeoutMs: 60_000, profile });
 }
-export function readInventory(limit = 30, profile) {
-  return runOpencli(['xiaohongshu', 'inventory', '--limit', String(limit), ...browserArgs], { profile });
+export function readInventory(limit = 30, profile, { includeMeta = false } = {}) {
+  return runOpencli([
+    'xiaohongshu',
+    'inventory',
+    '--limit',
+    String(limit),
+    ...(includeMeta ? ['--include-meta', 'true'] : []),
+    ...browserArgs,
+  ], { profile });
 }
 export function readNote(id, profile, noteType = 'normal') {
   return runOpencli(['xiaohongshu', 'steward-read-note', id, '--note-type', noteType, ...browserArgs], { profile });

@@ -61,6 +61,16 @@ function scrollManagerScript() {
   })()`;
 }
 
+function inventoryTotalScript() {
+  return `(() => {
+    const text = document.body?.innerText || '';
+    const match = text.match(/(?:^|\\n)全部\\s+(\\d+)(?:\\s|$)/);
+    if (!match) return null;
+    const total = Number(match[1]);
+    return Number.isSafeInteger(total) && total >= 0 ? total : null;
+  })()`;
+}
+
 cli({
   site: 'xiaohongshu',
   name: 'inventory',
@@ -72,23 +82,29 @@ cli({
   browser: true,
   navigateBefore: false,
   args: [
-    { name: 'limit', type: 'int', default: 50, help: 'Maximum unique notes to return (1-600)' },
+    { name: 'limit', type: 'int', default: 50, help: 'Maximum unique notes to return (1-1000)' },
+    { name: 'include-meta', type: 'bool', default: false, help: 'Return total, complete and truncated coverage metadata' },
   ],
   columns: ['rank', 'id', 'title', 'date', 'status', 'cover'],
   func: withOwnedTabCleanup(async (page, kwargs) => {
     const limit = Number(kwargs.limit ?? 50);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 600) {
-      throw new ArgumentError('limit must be an integer between 1 and 600');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      throw new ArgumentError('limit must be an integer between 1 and 1000');
     }
 
     await page.goto(MANAGER_URL);
     await page.wait({ time: 2 });
     const currentUrl = String(await page.evaluate('location.href'));
     if (/login|passport/i.test(currentUrl)) throw new AuthRequiredError('creator.xiaohongshu.com');
+    const advertisedTotal = await page.evaluate(inventoryTotalScript());
+    const total = Number.isSafeInteger(advertisedTotal) && advertisedTotal >= 0
+      ? advertisedTotal
+      : null;
 
     const notes = new Map();
     let stagnantRounds = 0;
-    for (let round = 0; round < 120 && notes.size < limit; round += 1) {
+    let exhausted = false;
+    for (let round = 0; round < 160 && notes.size < limit; round += 1) {
       const batch = await page.evaluate(extractCardsScript());
       if (!Array.isArray(batch)) {
         throw new CommandExecutionError('Creator note manager returned an unexpected card list');
@@ -101,11 +117,16 @@ cli({
 
       if (notes.size > previousSize) stagnantRounds = 0;
       else stagnantRounds += 1;
-      if (stagnantRounds >= 4) break;
+      if (stagnantRounds >= 4) {
+        exhausted = true;
+        break;
+      }
+      if (total != null && notes.size >= total) break;
 
       const scroll = await page.evaluate(scrollManagerScript());
       if (!scroll?.found) {
         // Small and empty accounts do not need a scroll container.
+        exhausted = true;
         break;
       }
       await page.wait({ time: 1.1 });
@@ -123,9 +144,21 @@ cli({
         'Confirm the account is logged in and the note manager is available.',
       );
     }
-    return Array.from(notes.values()).slice(0, limit).map((note, index) => ({
+    const result = Array.from(notes.values()).slice(0, limit).map((note, index) => ({
       rank: index + 1,
       ...note,
     }));
+    if (!kwargs['include-meta']) return result;
+    const complete = total != null
+      ? result.length >= total
+      : exhausted && result.length < limit;
+    return {
+      notes: result,
+      total,
+      returned: result.length,
+      complete,
+      truncated: total != null ? result.length < total : !complete,
+      requestedLimit: limit,
+    };
   }),
 });
