@@ -358,12 +358,30 @@ export class Controller {
       addEvent(db, id, event, payload);
     }));
   }
-  async inventory(alias, limit = 100) {
+  async inventory(alias, limit = 1000) {
     const account = getAccount(alias);
     const identity = await verifiedIdentity(account);
-    const notes = resultData(await readInventory(limit, account.profile), 'Inventory');
+    const payload = resultData(
+      await readInventory(limit, account.profile, { includeMeta: true }),
+      'Inventory',
+    );
+    const notes = Array.isArray(payload) ? payload : payload?.notes;
     if (!Array.isArray(notes)) throw new Error('Inventory did not return an array');
-    return { ok: true, account: alias, identity, notes };
+    return {
+      ok: true,
+      account: alias,
+      identity,
+      notes,
+      ...(!Array.isArray(payload) && payload
+        ? {
+            total: payload.total,
+            returned: payload.returned,
+            complete: payload.complete,
+            truncated: payload.truncated,
+            requestedLimit: payload.requestedLimit,
+          }
+        : {}),
+    };
   }
   async catalogSync(alias, { limit = 100 } = {}) {
     const inventory = await this.inventory(alias, limit);
