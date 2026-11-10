@@ -57,7 +57,7 @@ Usage:
   xhs-ops account list
   xhs-ops account status [ALIAS]
   xhs-ops account takeover ALIAS --user-id ID --profile PROFILE --from-home DIRECTORY --reason TEXT
-  xhs-ops inventory --account ALIAS [--limit 100]
+  xhs-ops inventory --account ALIAS [--limit 1000]
   xhs-ops note NOTE_ID --account ALIAS [--note-type video]
   xhs-ops inspect PACKAGE
   xhs-ops ingest PACKAGE [--dry-run]
