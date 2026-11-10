@@ -1,20 +1,23 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "rednote-steward",
   "version": "0.2.3",
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "author": {
     "name": "OPL"
   },
-  "skills": "./skills/",
   "license": "Apache-2.0",
-  "mcpServers": "./mcp.json",
   "repository": "https://github.com/gaofeng21cn/rednote-steward",
-  "interface": {
-    "displayName": "RedNote Steward",
-    "shortDescription": "Xiaohongshu publication and account operations.",
-    "longDescription": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
-    "developerName": "OPL",
-    "category": "Productivity",
-    "websiteURL": "https://github.com/gaofeng21cn/rednote-steward"
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "RedNote Steward",
+        "shortDescription": "Xiaohongshu publication and account operations.",
+        "longDescription": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
+        "developerName": "OPL",
+        "category": "Productivity",
+        "websiteURL": "https://github.com/gaofeng21cn/rednote-steward"
+      }
+    }
   }
 }
