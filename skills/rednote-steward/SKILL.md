@@ -38,9 +38,13 @@ Read `task_get` / `show` first. Use `handoff` to obtain the exact frozen content
 
 Phase records explain observed work; they do not guarantee the platform retained uploaded media after a tab or process closed. Reuse an uploaded composer only when its exact account, content/media and unsubmitted state have been observed. A person's manual click should be associated with the original task using `link-existing`; preserve the manual statement separately from same-note platform readback. Reconciliation, linking and missing receipt/metrics recovery never re-submit the post.
 
+For a historical task missing cover-selection events, use `cover_evidence` / `cover-evidence` with the saved current platform cover, then pass the receipt to `task_link_existing` / `link-existing`. The controller recomputes image content and binds it to the frozen task, stable account, exact note and fresh browser readback. Preserve the missing events as history; unavailable or low-confidence evidence remains unresolved. Use `task_supersede` / `supersede` when a verified replacement task owns the same account, profile and note. A fresh readback must still match the replacement; the old task retains its verification gap and replacement link while releasing its obsolete write block. An unknown publication without an exact note ID still needs reconciliation.
+
 ## Maintain existing posts
 
 Start with the requested scope and account preferences. The catalog organizes platform note IDs, series/episodes, local sources, media versions and maintenance decisions without creating publication tasks. Series are content organization; batches are execution groups. Platform collections or ordering require separately verified platform support.
+
+Read inventory coverage alongside the notes: `total`, `returned`, `complete`, `truncated` and `requestedLimit`. Choose an explicit limit up to 1,000 for an account-wide read, and treat it as complete only when `complete` is true. An unavailable platform total keeps coverage unknown even if scrolling stops. Candidate lookup or absence checks need the relevant range covered before drawing a conclusion.
 
 Use an inspection cursor for authorized incremental maintenance. Inventory and metrics identify candidates; they do not decide editorial quality. Before changing a post, understand what the author intended to share and what the edit improves. Keep mature series by default and address known material problems locally.
 
@@ -52,17 +56,21 @@ For prepared medical or educational videos, use the approved media, cover, copy,
 
 When the existing video editor supports replacement, use an `edit` package with the same
 `sourceNoteId`, `video`, and optional `cover`. Read the video editor with `noteType: "video"`
-or `--note-type video`. Check that the saved video resource changed; the same title, topics
-or duration alone cannot establish a replacement. Preserve the active composer and reconcile
-an interrupted attempt before uploading again.
+or `--note-type video`. Record the saved resource change separately from content agreement.
+Use `media_compare` / `media-compare` with the frozen local video and the downloaded same-note
+readback when checking the saved version: it compares SHA-256, duration, full-duration
+2 fps image samples and normalized audio. Review low-score frame evidence and keep
+`review_required` results unresolved. Preserve the active composer and reconcile an
+interrupted attempt before uploading again.
 
 When replacing both video and cover, the creator editor uses two saves: video and
 copy first, then the custom cover after reopening the same note. Each stage submits
 once. Read the saved stage evidence before recovery; an already-saved video must
 not be uploaded again to finish its cover. `prepare-only` leaves the cover stage
-pending. Final cover readback requires the recorded selection and a saved resource
-change from before that stage. Platform transformation may change its path;
-resource equality and image content comparison are recorded separately.
+pending. Ordinary cover verification uses the recorded selection and a saved resource
+change from before that stage. Historical tasks can use the independent cover-content
+evidence path above. Platform transformation may change its path; resource equality
+and image content comparison are recorded separately.
 If only the cover needs repair, use an edit package with `cover` and no `video`.
 The controller reads the existing video first and the adapter changes only the
 cover and copy, so recovery never uploads an already-saved video again. The
