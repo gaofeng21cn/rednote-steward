@@ -61,6 +61,8 @@ xhs-ops reconcile TASK_ID
 
 创作者笔记清单支持最高 1,000 条的有界读取；需要全量时显式传入足够大的 limit。`xhs-ops inventory` 返回 `total`、`returned`、`complete`、`truncated` 和 `requestedLimit`；`complete: false` 表示本次只读不完整，不能当作账号全量。底层适配器对未请求 metadata 的旧调用仍返回原始数组。
 
+总数不可读取时，虚拟列表停止加载仍视为未完整读取；经确认的空账号也返回相同 metadata 结构。
+
 Catalog 是按稳定账号 ID 与平台 note ID 建立的本地投影。同步清单只更新平台观察字段，保留本地系列、来源和维护判断，也不会创建发布任务。
 
 ```bash

@@ -183,6 +183,34 @@ test('inventory accepts a limit above the former 600-note ceiling', async () => 
   assert.equal(result.notes.length, 1);
 });
 
+test('inventory keeps coverage unknown when total is unavailable and cards stop loading', async () => {
+  const command = getRegistry().get('xiaohongshu/inventory');
+  const note = { id: 'd'.repeat(24), title: 'Loaded page', date: '', cover: '', status: 'unknown' };
+  const answers = ['https://creator.xiaohongshu.com/new/note-manager', null, [note], { found: false }];
+  const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
+  const result = await command.func(page, { limit: 1000, 'include-meta': true });
+  assert.equal(result.total, null);
+  assert.equal(result.returned, 1);
+  assert.equal(result.complete, false);
+  assert.equal(result.truncated, true);
+});
+
+test('inventory preserves metadata for a confirmed empty account and rejects conflicting total', async () => {
+  const command = getRegistry().get('xiaohongshu/inventory');
+  for (const total of [0, null, 808]) {
+    const answers = ['https://creator.xiaohongshu.com/new/note-manager', total, [], { found: false }, true];
+    if (total === 0) answers.splice(3, 1);
+    const page = { goto: async () => {}, wait: async () => {}, evaluate: async () => answers.shift() };
+    if (total === 808) {
+      await assert.rejects(command.func(page, { limit: 1000, 'include-meta': true }), /No creator note cards loaded/);
+    } else {
+      assert.deepEqual(await command.func(page, { limit: 1000, 'include-meta': true }), {
+        notes: [], total: 0, returned: 0, complete: true, truncated: false, requestedLimit: 1000,
+      });
+    }
+  }
+});
+
 function videoEditor({ inputCount = 1, uploadError = null, image = false, durationAfterUpload = 65.13 } = {}) {
   const title = { offsetParent: {}, value: 'Example' };
   const body = { offsetParent: {}, querySelectorAll: () => [] };
