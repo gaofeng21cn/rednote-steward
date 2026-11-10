@@ -18,6 +18,10 @@ test('video comparison parses SSIM and stereo PSNR without using duration as ide
     parsePsnrOutput('PSNR ch0: 169.057 dB\nPSNR ch1: 168.900 dB'),
     { channel0: 169.057, channel1: 168.9 },
   );
+  assert.deepEqual(
+    parsePsnrOutput('PSNR ch0: inf dB\nPSNR ch1: inf dB'),
+    { channel0: Infinity, channel1: Infinity },
+  );
 });
 
 test('video comparison reports a content match with separate byte identity', async t => {
@@ -32,7 +36,7 @@ test('video comparison reports a content match with separate byte identity', asy
       return { exitCode: 0, stdout: args.includes(local) ? '10\n' : '10.1\n', stderr: '' };
     }
     if (args.some(arg => String(arg).includes('ssim'))) {
-      return { exitCode: 0, stdout: '', stderr: 'SSIM Y:0.997 Y:0 U:0 V:0 All:0.998' };
+      return { exitCode: 0, stdout: 'n:1 Y:0.998 All:0.998 (20)\n', stderr: 'SSIM Y:0.997 Y:0 U:0 V:0 All:0.998' };
     }
     if (args.some(arg => String(arg).includes('apsnr'))) {
       return { exitCode: 0, stdout: '', stderr: 'PSNR ch0: 50 dB PSNR ch1: 49 dB' };
@@ -57,7 +61,7 @@ test('video comparison keeps low similarity as review-required evidence', async 
   await fs.writeFile(platform, 'different synthetic bytes');
   const runner = async (_command, args) => {
     if (args.includes('-show_entries')) return { exitCode: 0, stdout: '10\n', stderr: '' };
-    if (args.some(arg => String(arg).includes('ssim'))) return { exitCode: 0, stdout: '', stderr: 'SSIM Y:0.1 All:0.2' };
+    if (args.some(arg => String(arg).includes('ssim'))) return { exitCode: 0, stdout: 'n:1 Y:0.1 All:0.2 (0)\n', stderr: 'SSIM Y:0.1 All:0.2' };
     if (args.some(arg => String(arg).includes('apsnr'))) return { exitCode: 0, stdout: '', stderr: 'PSNR ch0: 50 dB PSNR ch1: 50 dB' };
     throw new Error('Unexpected command');
   };

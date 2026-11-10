@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -48,13 +49,19 @@ export function parseSsimOutput(stderr) {
 
 export function parsePsnrOutput(stderr) {
   const matches = [...String(stderr).matchAll(
-    /PSNR\s+ch0:\s*([0-9.]+)\s*dB.*?PSNR\s+ch1:\s*([0-9.]+)\s*dB/gs,
+    /PSNR\s+ch0:\s*(inf|[0-9.]+)\s*dB.*?PSNR\s+ch1:\s*(inf|[0-9.]+)\s*dB/gs,
   )];
   if (!matches.length) return null;
   return {
-    channel0: Number(matches.at(-1)[1]),
-    channel1: Number(matches.at(-1)[2]),
+    channel0: matches.at(-1)[1] === 'inf' ? Infinity : Number(matches.at(-1)[1]),
+    channel1: matches.at(-1)[2] === 'inf' ? Infinity : Number(matches.at(-1)[2]),
   };
+}
+
+export function parseSsimSamples(stdout) {
+  return [...String(stdout).matchAll(/^n:(\d+) .*?All:([0-9.]+)(?: |$)/gm)]
+    .map(match => ({ frame: Number(match[1]), seconds: (Number(match[1]) - 1) / 2, ssim: Number(match[2]) }))
+    .filter(sample => Number.isSafeInteger(sample.frame) && sample.frame > 0 && Number.isFinite(sample.ssim) && sample.ssim >= 0 && sample.ssim <= 1);
 }
 
 async function probeDuration(file, { ffprobe, runner }) {
@@ -116,7 +123,7 @@ export async function compareVideoFiles(localFile, platformFile, options = {}) {
     platformPath,
     '-filter_complex',
     '[0:v]fps=2,scale=320:180,setpts=PTS-STARTPTS[v0];'
-      + '[1:v]fps=2,scale=320:180,setpts=PTS-STARTPTS[v1];[v0][v1]ssim',
+      + '[1:v]fps=2,scale=320:180,setpts=PTS-STARTPTS[v1];[v0][v1]ssim=stats_file=-',
     '-an',
     '-f',
     'null',
@@ -140,18 +147,37 @@ export async function compareVideoFiles(localFile, platformFile, options = {}) {
 
   const ssim = visual.exitCode === 0 ? parseSsimOutput(visual.stderr) : null;
   const psnr = audio.exitCode === 0 ? parsePsnrOutput(audio.stderr) : null;
+  const visualSamples = visual.exitCode === 0 ? parseSsimSamples(visual.stdout) : [];
+  const lowVisualSamples = visualSamples.filter(sample => sample.ssim < ssimThreshold);
+  const frameEvidence = [];
   const durationDelta = localDuration != null && platformDuration != null
     ? Math.abs(localDuration - platformDuration)
     : null;
   const reasons = [];
   if (!ssim) reasons.push('visual comparison unavailable');
-  else if (ssim.all < ssimThreshold) reasons.push('visual content differs');
+  else if (ssim.all < ssimThreshold || lowVisualSamples.length) reasons.push('visual content differs');
+  if (!visualSamples.length) reasons.push('visual sample evidence unavailable');
   if (!psnr) reasons.push('audio comparison unavailable');
   else if (Math.min(psnr.channel0, psnr.channel1) < audioPsnrThreshold) {
     reasons.push('audio content differs');
   }
   if (durationDelta == null) reasons.push('duration comparison unavailable');
   else if (durationDelta > durationTolerance) reasons.push('duration differs');
+
+  if (options.evidenceDirectory && lowVisualSamples.length) {
+    const directory = path.resolve(options.evidenceDirectory);
+    await fs.mkdir(directory, { mode: 0o700 });
+    // Keep bounded, deterministic pairs for review; no source file is modified.
+    for (const sample of [...lowVisualSamples].sort((a, b) => a.ssim - b.ssim).slice(0, 6)) {
+      const pair = { ...sample, local: null, platform: null };
+      for (const [side, file] of [['local', localPath], ['platform', platformPath]]) {
+        const output = path.join(directory, `${sample.frame}-${side}.png`);
+        const extracted = await runner(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-n', '-ss', String(sample.seconds), '-i', file, '-frames:v', '1', output]);
+        if (extracted.exitCode === 0) pair[side] = output;
+      }
+      frameEvidence.push(pair);
+    }
+  }
 
   return {
     ok: reasons.length === 0,
@@ -172,12 +198,15 @@ export async function compareVideoFiles(localFile, platformFile, options = {}) {
     comparison: {
       visualSsim: ssim?.all ?? null,
       visualSsimY: ssim?.y ?? null,
+      visualSamples,
+      lowVisualSamples,
+      frameEvidence,
       audioPsnrDb: psnr
-        ? Math.min(psnr.channel0, psnr.channel1)
+        ? (Math.min(psnr.channel0, psnr.channel1) === Infinity ? 'infinity' : Math.min(psnr.channel0, psnr.channel1))
         : null,
       durationDeltaSeconds: durationDelta,
       reviewReasons: reasons,
-      method: 'full-duration video SSIM sampled at 2 fps after 320x180 scaling; normalized stereo audio PSNR at 48 kHz; duration check',
+      method: 'full-duration video SSIM sampled at 2 fps after 320x180 scaling, checking the aggregate and every sample; normalized stereo audio PSNR at 48 kHz; duration check',
       limits: 'Content comparison does not prove platform review, visibility or audience reception.',
     },
     thresholds: {

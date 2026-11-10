@@ -216,11 +216,13 @@ tool('media_compare', 'Compare approved video bytes with a downloaded platform r
   ssimThreshold: z.number().min(0).max(1).default(0.995),
   audioPsnrThreshold: z.number().min(0).default(30),
   durationTolerance: z.number().min(0).default(0.25),
-}, ({ localPath, platformPath, ssimThreshold, audioPsnrThreshold, durationTolerance }) => callCli([
+  evidenceDirectory: packagePath.optional(),
+}, ({ localPath, platformPath, ssimThreshold, audioPsnrThreshold, durationTolerance, evidenceDirectory }) => callCli([
   'media-compare', localPath, platformPath,
   '--ssim-threshold', String(ssimThreshold),
   '--audio-psnr-threshold', String(audioPsnrThreshold),
   '--duration-tolerance', String(durationTolerance),
+  ...(evidenceDirectory ? ['--evidence-dir', evidenceDirectory] : []),
 ]));
 tool('backend_qualify', 'Benchmark read-only identity and inventory probes for the explicitly selected local backend. Publishing capabilities remain untested.', {
   account, backendLabel: z.string().default('bundled'), repeats: z.number().int().min(1).max(20).default(3), limit,

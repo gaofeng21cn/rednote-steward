@@ -24,7 +24,7 @@ function parseArgs(argv, command) {
     const separator = token.indexOf('=');
     const key = token.slice(2, separator < 0 ? undefined : separator);
     if (separator >= 0) { options[key] = token.slice(separator + 1); continue; }
-    if (flags.has(key) && !(key === 'status' && command !== 'setup')) { options[key] = true; continue; }
+    if (flags.has(key) && !(key === 'status' && command !== 'setup') && !(key === 'ffprobe' && command === 'media-compare')) { options[key] = true; continue; }
     const next = argv[index + 1];
     if (!next || next.startsWith('--')) throw new Error(`--${key} requires a value`);
     options[key] = next; index++;
@@ -232,12 +232,13 @@ export async function main(argv = process.argv.slice(2)) {
         durationTolerance: options['duration-tolerance'],
         ffmpeg: options.ffmpeg,
         ffprobe: options.ffprobe,
+        evidenceDirectory: options['evidence-dir'] || (options.output ? `${path.resolve(options.output)}.frames` : undefined),
       },
     );
     if (options.output) {
       const output = path.resolve(options.output);
       result = { ...result, output };
-      await fs.writeFile(output, `${JSON.stringify(result, null, 2)}\n`);
+      await fs.writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     }
   }
   else if (command === 'qualify') {
