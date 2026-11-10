@@ -65,6 +65,8 @@ needed limit explicitly; CLI `xhs-ops inventory` responses include `total`,
 `complete: false` as a partial read. The adapter keeps returning a bare row
 array for callers that do not request metadata.
 
+Without an advertised total, a stopped virtual list remains incomplete; a confirmed empty-state view returns the same metadata shape.
+
 The catalog is a local projection keyed by stable account ID and platform note ID. Synchronizing platform inventory updates observed fields while preserving local organization and editorial decisions. It does not create publication tasks.
 
 ```bash
