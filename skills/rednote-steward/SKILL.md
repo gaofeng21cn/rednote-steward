@@ -7,6 +7,13 @@ description: Manage Xiaohongshu prepared image/video publication, queues, accoun
 
 Use the installed `xhs-ops` CLI or `rednote-steward` MCP tools as the publication manager. They share account bindings, task state and recovery rules. Prefer the packaged OpenCLI/Chrome path for supported operations. Use browser or computer interaction for a demonstrated gap, preserving the current attempt.
 
+When installed as an OPL/Codex plugin, use its `rednote-steward` MCP server or
+`node <plugin-root>/scripts/run-plugin.mjs cli <arguments>`. The plugin prepares
+its locked Node dependencies in its own directory and runs the same controller;
+it does not require a separate native application install. The native
+`xhs-ops installation status --json` command inspects only the separate native
+installation, so its `not_installed` result does not mean the plugin is absent.
+
 Read the installed `xhs-ops help` and project docs for the actual command surface. This generic Skill owns tool routing; the user's project guidance supplies account voice, media sources and permitted work. Keep private account IDs, content, receipts and records in the private state root or content workspace.
 
 ## Choose the account and resume point

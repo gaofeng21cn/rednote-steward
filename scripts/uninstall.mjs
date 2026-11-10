@@ -10,8 +10,12 @@ const root = path.resolve(location.root);
 const realRoot = await fs.realpath(root);
 if (location.product !== 'rednote-steward' || root === path.parse(root).root) throw new Error('Unrecognized installation location.');
 const record = JSON.parse(await fs.readFile(path.join(root, 'install.json'), 'utf8'));
+const selected = await fs.realpath(path.join(root, 'current'));
 if (record.product !== 'rednote-steward' || record.root !== root || !appRoot.startsWith(`${realRoot}${path.sep}releases${path.sep}`)) {
   throw new Error('Installation ownership could not be verified.');
+}
+if (selected !== await fs.realpath(appRoot) || selected !== await fs.realpath(record.current) || record.uninstalledAt) {
+  throw new Error('Run the uninstaller from the currently selected installation.');
 }
 const integrations = await setup({ uninstall: true, installRoot: root, binDir: record.bin, stateRoot: record.stateRoot });
 const commands = [];

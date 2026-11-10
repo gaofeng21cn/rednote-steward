@@ -54,7 +54,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const [from, to] = process.argv.slice(2);
-const entries = ['package.json', 'package-lock.json', 'release-manifest.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin'];
+const entries = ['package.json', 'package-lock.json', 'release-manifest.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin', 'mcp.json', '.agents/plugins'];
 for (const name of entries) {
   try { await fs.cp(path.join(from, name), path.join(to, name), { recursive: true }); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }

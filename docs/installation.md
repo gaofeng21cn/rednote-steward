@@ -95,6 +95,18 @@ The server exposes tools for account probing and binding, inventory and note rea
 Read installation status:
 
 ```bash
+xhs-ops installation status --json
+```
+
+This local read checks the selected release, installation record, code digest
+and managed commands. It returns the product name, stable ID, installed version
+and revision without account data, browser activity or private paths. Source
+checkouts and the Codex plugin do not count as a native application install.
+Available updates remain unchecked until the software source is queried.
+
+Inspect managed integrations separately:
+
+```bash
 xhs-ops setup --status
 ```
 
@@ -118,6 +130,32 @@ bash "$HOME/.local/share/rednote-steward/app/current/scripts/uninstall.sh"
 ```
 
 Private account state, task history, receipts, and media are retained. `xhs-ops setup --uninstall` removes only managed Skill/MCP integrations. Existing files that setup replaces are backed up; unrelated configuration is preserved.
+
+The uninstaller must belong to the currently selected native release. An old
+release cannot remove a newer installation. Installer progress output is not a
+single JSON response; management callers verify the result with a fresh
+installation status read.
+
+## OPL and Codex plugin management
+
+The stable Package ID is `rednote-steward`; the display name is **RedNote
+Steward**. Its description and localized presentation live in `opl-package.json`.
+The repository marketplace declares `rednote-steward@rednote-steward`. OPL uses
+the pinned source payload and Codex native plugin manager for installation,
+update, enable/disable and removal. Preview channel eligibility is separate from
+account login and verified publishing capabilities.
+
+The plugin contains the runtime, MCP definition and package lock. Its shared
+launcher prepares dependencies with `npm ci --ignore-scripts` inside the plugin
+directory, sends setup messages to stderr, and starts the same CLI, MCP or App
+contribution entrypoint. Node.js 24+ and npm are required. No global npm package,
+native application selection, extra MCP registration or browser session is
+created by this dependency preparation.
+
+Removing the plugin removes that carrier; it leaves the native application and
+private account/task/media state with their existing owners. Use the same
+`XHS_OPS_HOME` when both carriers should operate the same queue. Installing a
+plugin does not grant publication authorization or create a second account owner.
 
 ## Existing xhs-ops workspaces
 
