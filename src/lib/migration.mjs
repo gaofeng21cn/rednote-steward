@@ -9,7 +9,7 @@ const SCHEMA_VERSION = 1;
 const KNOWN_LEDGER_SCHEMA = 3;
 const UNRESOLVED = new Set(['running', 'submitted', 'needs_review', 'result_unknown', 'uploaded_not_submitted', 'submitted_review']);
 const VERIFIED = new Set(['verified', 'published_verified']);
-const KNOWN_STATES = new Set([...UNRESOLVED, ...VERIFIED, 'draft', 'queued', 'failed', 'cancelled', 'pending_upload', 'ready_to_publish', 'source_changed']);
+const KNOWN_STATES = new Set([...UNRESOLVED, ...VERIFIED, 'draft', 'queued', 'failed', 'cancelled', 'superseded', 'pending_upload', 'ready_to_publish', 'source_changed']);
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function sha256(value) {
@@ -116,7 +116,7 @@ function statusOf(row) {
   if (!KNOWN_STATES.has(status)) throw new Error(`Unsupported legacy task state: ${status}`);
   if (VERIFIED.has(status)) return 'verified';
   if (UNRESOLVED.has(status)) return 'needs_review';
-  if (status === 'cancelled') return 'cancelled';
+  if (status === 'cancelled' || status === 'superseded') return 'cancelled';
   // A source task has no current user authorization in the new controller.
   return 'draft';
 }

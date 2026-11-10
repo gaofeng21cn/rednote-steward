@@ -71,11 +71,13 @@ Usage:
   xhs-ops prepare TASK_ID
   xhs-ops run-batch BATCH_ID [--account ALIAS] [--limit N]
   xhs-ops cancel TASK_ID [--reason TEXT]
+  xhs-ops supersede TASK_ID --replacement-task TASK_ID --reason TEXT
   xhs-ops pause [--account ALIAS] [--batch BATCH_ID] [--reason TEXT]
   xhs-ops resume [--account ALIAS] [--batch BATCH_ID]
   xhs-ops reconcile TASK_ID [--note-id ID] [--absent --reason TEXT]
   xhs-ops handoff TASK_ID
-  xhs-ops link-existing TASK_ID --note-id NOTE_ID [--reason TEXT]
+  xhs-ops link-existing TASK_ID --note-id NOTE_ID --reason TEXT [--cover-evidence FILE]
+  xhs-ops cover-evidence TASK_ID --note-id NOTE_ID --platform-cover FILE --output FILE
   xhs-ops collect --account ALIAS [--limit 120]
   xhs-ops metrics-history --account ALIAS [--note-id NOTE_ID] [--limit 50]
   xhs-ops catalog [--account ALIAS] [--series SERIES_ID] [--status STATUS] [--limit 100]
@@ -181,7 +183,22 @@ export async function main(argv = process.argv.slice(2)) {
   else if (command === 'resume') result = controller.resume({ account: options.account, batchId: options.batch });
   else if (['reconcile', 'recover'].includes(command)) result = await controller.reconcile(requireValue(positionals[0], 'reconcile TASK_ID'), { noteId: options['note-id'], absent: Boolean(options.absent), reason: options.reason });
   else if (command === 'handoff') result = controller.handoff(requireValue(positionals[0], 'handoff TASK_ID'));
-  else if (command === 'link-existing') result = await controller.linkExisting(requireValue(positionals[0], 'link-existing TASK_ID'), { noteId: requireValue(options['note-id'], 'link-existing TASK_ID --note-id NOTE_ID'), reason: options.reason });
+  else if (command === 'link-existing') result = await controller.linkExisting(requireValue(positionals[0], 'link-existing TASK_ID'), {
+    noteId: requireValue(options['note-id'], 'link-existing TASK_ID --note-id NOTE_ID'),
+    reason: options.reason, coverEvidence: options['cover-evidence'],
+  });
+  else if (command === 'cover-evidence') {
+    result = await controller.coverEvidence(requireValue(positionals[0], 'cover-evidence TASK_ID'), {
+      noteId: requireValue(options['note-id'], 'cover-evidence --note-id NOTE_ID'),
+      platformCover: path.resolve(requireValue(options['platform-cover'], 'cover-evidence --platform-cover FILE')),
+    });
+    const output = path.resolve(requireValue(options.output, 'cover-evidence --output FILE'));
+    await fs.writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    result = { ...result, output };
+  }
+  else if (command === 'supersede') result = await controller.supersede(requireValue(positionals[0], 'supersede TASK_ID'), {
+    replacementId: requireValue(options['replacement-task'], 'supersede --replacement-task TASK_ID'), reason: requireValue(options.reason, 'supersede --reason TEXT'),
+  });
   else if (['collect', 'audit'].includes(command)) result = await controller.collect(requireValue(options.account, `${command} --account ALIAS`), integer(options.limit, 120), { audit: command === 'audit' });
   else if (command === 'metrics-history') result = controller.metricsHistory({ account: requireValue(options.account, 'metrics-history --account ALIAS'), noteId: options['note-id'], limit: integer(options.limit, 50) });
   else if (command === 'catalog') {

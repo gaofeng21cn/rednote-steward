@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Synthetic browser adapter for controller behavior tests. No network access.
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
 const args = process.argv.slice(2);
 const command = args[1];
 const option = key => args[args.indexOf(key) + 1];
@@ -19,7 +20,11 @@ else if (command === 'steward-read-note') {
     process.stderr.write('The synthetic video note requires the video editor\n'); process.exit(1);
   }
   if (process.env.FAKE_READ_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_READ_DELAY)));
-  output(state.notes.filter(note => note.noteId === args[2]));
+  output(state.notes.filter(note => note.noteId === args[2]).map(note => {
+    if (!args.includes('--cover-hash') || !process.env.FAKE_COVER_FILE) return note;
+    const bytes = fs.readFileSync(process.env.FAKE_COVER_FILE);
+    return { ...note, coverContent: { sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length } };
+  }));
 }
 else if (command === 'creator-notes-summary') output([{ id: '000000000000000000000001', title: 'Example', views: 500, collects: 2, comments: 7 }]);
 else if (['steward-publish','edit-note'].includes(command)) {

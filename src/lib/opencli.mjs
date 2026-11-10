@@ -72,8 +72,8 @@ export function readInventory(limit = 30, profile, { includeMeta = false } = {})
     ...browserArgs,
   ], { profile });
 }
-export function readNote(id, profile, noteType = 'normal') {
-  return runOpencli(['xiaohongshu', 'steward-read-note', id, '--note-type', noteType, ...browserArgs], { profile });
+export function readNote(id, profile, noteType = 'normal', { coverHash = false } = {}) {
+  return runOpencli(['xiaohongshu', 'steward-read-note', id, '--note-type', noteType, ...(coverHash ? ['--cover-hash', 'true'] : []), ...browserArgs], { profile });
 }
 export function readMetrics(limit = 120, profile) {
   return runOpencli(['xiaohongshu', 'creator-notes-summary', '--limit', String(limit), '--timeout', '600', ...browserArgs], { timeoutMs: 660_000, profile });

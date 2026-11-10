@@ -142,3 +142,17 @@ Before changing the pinned browser runtime, qualify the actual account/backend c
 xhs-ops qualify --account travel --backend-label bundled --repeats 3
 xhs-ops compare-qualifications ./qualification-a.json ./qualification-b.json
 ```
+
+
+## Historical cover evidence and supersession
+
+When an old video edit lacks its cover-selection events, preserve those events as missing. Download the cover shown by the exact note's current readback, then create a bound content receipt:
+
+```bash
+xhs-ops cover-evidence TASK_ID --note-id NOTE_ID --platform-cover ./saved-cover.jpg --output ./cover-evidence.json
+xhs-ops link-existing TASK_ID --note-id NOTE_ID --reason "Recovered saved cover content" --cover-evidence ./cover-evidence.json
+```
+
+Both commands verify the bound account through the existing browser profile. The read-note adapter hashes the current cover in that browser context, with HTTPS platform-host, 20 MiB and 30-second limits. The saved platform file must match those bytes. The tool checks the frozen local cover hash, task fingerprint, account, note and current URL, and recomputes image similarity. Exact bytes pass; transformed images require compatible aspect ratio and SSIM of at least 0.995 after fixed normalization. `ffmpeg` and `ffprobe` are needed for transformed images. Missing tools, unavailable downloads, stale bindings and low scores leave the task unresolved. The receipt is private local evidence, never a substitute for platform moderation or visibility. No history of clicks or submissions is synthesized.
+
+A historical duplicate can be retired with `xhs-ops supersede OLD_TASK --replacement-task VERIFIED_TASK --reason "Current record replaces the imported task"`. The replacement must already be verified for the same stable account, browser profile and exact note. Its current note must still match its saved readback, and neither task may have a live writer. Supersession preserves the original unverified result and appends the replacement relationship; it never verifies the old task or authorizes a retry. Unknown publications without a known original note remain unresolved. CLI and MCP use the same controller and account lock.

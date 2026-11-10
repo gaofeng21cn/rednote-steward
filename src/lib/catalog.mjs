@@ -139,7 +139,7 @@ export function seriesOverview(db, { account, accountUserId, seriesId } = {}) {
     const notes = db.prepare('SELECT note_id,title,episode,maintenance_status,platform_url FROM catalog_notes WHERE account_user_id=? AND series_id=? ORDER BY episode,note_id').all(row.account_user_id,row.series_id);
     const present = new Set(notes.map(note => note.episode).filter(value => value != null));
     const tasks = taskColumns.has('series_id') ? db.prepare(`SELECT id,title,episode,state,platform_note_id FROM tasks WHERE account_user_id=? AND series_id=? ORDER BY episode,created_at`).all(row.account_user_id,row.series_id) : [];
-    const prepared = new Set(tasks.filter(task=>!['cancelled','failed'].includes(task.state)).map(task=>task.episode).filter(value=>value!=null));
+    const prepared = new Set(tasks.filter(task=>!['cancelled','superseded','failed'].includes(task.state)).map(task=>task.episode).filter(value=>value!=null));
     return { ...item, expectedEpisodes, notes, tasks, unpublishedEpisodes: expectedEpisodes.filter(value=>!present.has(value)),
       missingEpisodes: expectedEpisodes.filter(value => !present.has(value) && !prepared.has(value)) };
   }) };

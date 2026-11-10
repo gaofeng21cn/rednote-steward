@@ -160,8 +160,14 @@ tool('task_handoff', 'Read a frozen task handoff with last phase, intended field
 tool('task_prepare', 'Fill and inspect one authorized task without submitting it. Prepared state still requires recovery against the retained composer.', { taskId },
   ({ taskId }) => startTaskWorker(taskId, { prepareOnly: true }), { readOnly: false, browser: true });
 tool('task_link_existing', 'Read and link an existing platform note after manual publication. This does not submit a new post.', {
-  taskId, noteId, reason: z.string().min(1),
-}, ({ taskId, noteId, reason }) => callCli(['link-existing', taskId, '--note-id', noteId, ...(reason ? ['--reason', reason] : [])]), { readOnly: false, browser: true });
+  taskId, noteId, reason: z.string().min(1), coverEvidence: packagePath.optional(),
+}, ({ taskId, noteId, reason, coverEvidence }) => callCli(['link-existing', taskId, '--note-id', noteId, '--reason', reason, ...(coverEvidence ? ['--cover-evidence', coverEvidence] : [])]), { readOnly: false, browser: true });
+tool('cover_evidence', 'Recompute cover content evidence bound to one frozen task and the current same-note cover. This does not publish.', {
+  taskId, noteId, platformCover: packagePath, output: packagePath,
+}, ({ taskId, noteId, platformCover, output }) => callCli(['cover-evidence', taskId, '--note-id', noteId, '--platform-cover', platformCover, '--output', output]), { readOnly: false, browser: true });
+tool('task_supersede', 'Retire a historical task in favor of a verified replacement for the same account and note, preserving its unverified history.', {
+  taskId, replacementTaskId: taskId, reason: z.string().min(1),
+}, ({ taskId, replacementTaskId, reason }) => callCli(['supersede', taskId, '--replacement-task', replacementTaskId, '--reason', reason]), { readOnly: false, browser: true });
 tool('metrics_collect', 'Read account metrics into the local account history.', { account, limit },
   ({ account, limit }) => callCli(['collect', '--account', account, '--limit', String(limit)]), { readOnly: false, browser: true });
 tool('metrics_history', 'Read append-only observations for an account and optional note. Missing metrics remain distinct from zero.', {
