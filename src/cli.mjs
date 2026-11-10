@@ -49,6 +49,7 @@ function help() {
 
 Usage:
   xhs-ops setup [--repair] [--skip-integrations] [--skip-browser-setup]
+  xhs-ops installation status --json
   xhs-ops init
   xhs-ops doctor [--account ALIAS] [--redact]
   xhs-ops opencli <args...>
@@ -118,6 +119,14 @@ export async function main(argv = process.argv.slice(2)) {
   }
   const { positionals, options } = parseArgs(rest, command);
   if (command === 'help' || command === '--help' || options.help) { process.stdout.write(help()); return; }
+  if (command === 'installation') {
+    if ((positionals[0] || 'status') !== 'status' || positionals.length > 1
+      || Object.keys(options).some(key => key !== 'json')) throw new Error('Usage: xhs-ops installation status --json');
+    const { installationStatus } = await import('./lib/installation.mjs');
+    const result = await installationStatus();
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return result;
+  }
   const controller = new Controller();
   let result;
   if (command === 'setup') {

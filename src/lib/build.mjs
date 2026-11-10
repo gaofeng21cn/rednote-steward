@@ -14,7 +14,7 @@ export const BRIDGE_RELEASE = {
 };
 const PUBLIC_INPUTS = ['package.json', 'package-lock.json', 'src', 'adapters', 'skills', 'scripts',
   'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples',
-  'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin'];
+  'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin', 'mcp.json', '.agents/plugins'];
 
 export async function readJson(file, fallback = null) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }

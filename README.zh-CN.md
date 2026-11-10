@@ -136,7 +136,7 @@ xhs-ops handoff TASK_ID
 
 本地浏览器流程面向 macOS，通过固定版本的 OpenCLI/Browser Bridge 使用已登录的 Chrome。图文发布、旧帖维护、账号读取和内容清单沿用了已有工作流。适配器已包含视频和自定义封面的处理路径，测试覆盖控制流程；真实媒体验收按具体账号和环境单独记录。平台页面变化时，适配器可能需要相应更新。
 
-CLI、标准 MCP Server 和助手 Skill 共用同一任务 owner。源码 Package 已声明 OPL 共享 MCP App 的只读任务列表、精确内容差异、冻结素材和平台回读视图；载体安装及宿主验收完成前，Package 保持 development-only。没有共享 UI 的客户端可使用 `xhs-ops review TASK_ID` 或 `task_review`。内容生成和照片增强由你选用的工具完成，Steward 管理准备好的成果及其发布记录。
+CLI、标准 MCP Server 和助手 Skill 共用同一任务 owner。OPL/Codex 插件包含 CLI、MCP Server、锁定的运行依赖，以及任务列表、精确内容差异、冻结素材和平台回读的只读共享视图。OPL 通过原生插件管理器管理安装身份和生命周期，既有独立程序保留自己的安装载体。源码插件以预览身份接入目录，受保护发行频道仍为 development-only；既有独立程序 v0.2.3 已正式发布，两者状态分别展示。没有共享 UI 的客户端可使用 `xhs-ops review TASK_ID` 或 `task_review`。内容生成和照片增强由你选用的工具完成，Steward 管理准备好的成果及其发布记录。
 
 ## 文档与开发
 

@@ -1,0 +1,12 @@
+{
+  "name": "rednote-steward",
+  "interface": { "displayName": "RedNote Steward" },
+  "plugins": [
+    {
+      "name": "rednote-steward",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

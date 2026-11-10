@@ -24,7 +24,22 @@
     "optional_skills_installed_by_default": false,
     "default_materialization_policy": "core_skills_only"
   },
-  "entrypoints": [],
+  "entrypoints": [
+    {
+      "entrypoint_id": "rednote.steward.cli",
+      "kind": "cli",
+      "argv": [
+        "node",
+        "./scripts/run-plugin.mjs",
+        "cli"
+      ]
+    },
+    {
+      "entrypoint_id": "rednote.steward.mcp",
+      "kind": "mcp",
+      "manifest_ref": "mcp.json"
+    }
+  ],
   "codex_surface": {
     "plugin_id": "rednote-steward",
     "plugin_source_path": ".",
@@ -35,13 +50,21 @@
       "transport": "stdin_json_stdout_json",
       "argv": [
         "node",
-        "./src/app-contribution.mjs"
+        "./scripts/run-plugin.mjs",
+        "app-contribution"
       ],
       "request_schema": "opl-package-app-contribution-request.v1",
       "response_schema": "opl-package-app-contribution-response.v1"
     },
     "app_contribution_adapter": {
       "manifest": "app-contribution-adapter.json"
+    },
+    "configured_codex_plugin_carrier": {
+      "kind": "codex_plugin_manager",
+      "plugin_selector": "rednote-steward@rednote-steward",
+      "executor_route": "codex_cli",
+      "marketplace_source": "gaofeng21cn/rednote-steward",
+      "publication_ref": null
     }
   },
   "app_contributions": {
@@ -171,18 +194,23 @@
     "algorithm": "sha256",
     "canonicalization": "ordered_path_length_file_length_bytes",
     "paths": [
+      ".agents/plugins/marketplace.json",
       ".codex-plugin/plugin.json",
       "adapters/opencli/xiaohongshu/cover-editor.mjs",
       "adapters/opencli/xiaohongshu/declarations.mjs",
       "adapters/opencli/xiaohongshu/edit-note.js",
       "adapters/opencli/xiaohongshu/editor-helpers.mjs",
       "adapters/opencli/xiaohongshu/inventory.js",
+      "adapters/opencli/xiaohongshu/owned-tab.mjs",
       "adapters/opencli/xiaohongshu/page-check.mjs",
       "adapters/opencli/xiaohongshu/steward-account.js",
       "adapters/opencli/xiaohongshu/steward-publish.js",
       "adapters/opencli/xiaohongshu/steward-read-note.js",
       "adapters/opencli/xiaohongshu/topic-probe.js",
       "app-contribution-adapter.json",
+      "mcp.json",
+      "package-lock.json",
+      "package.json",
       "plugin.json",
       "scripts/check-package.mjs",
       "scripts/install-local.mjs",
@@ -190,6 +218,7 @@
       "scripts/package-lock.mjs",
       "scripts/package-release.mjs",
       "scripts/release-manifest.mjs",
+      "scripts/run-plugin.mjs",
       "scripts/uninstall.mjs",
       "scripts/uninstall.sh",
       "skills/rednote-steward/SKILL.md",
@@ -204,6 +233,7 @@
       "src/lib/cover-evidence.mjs",
       "src/lib/db.mjs",
       "src/lib/health.mjs",
+      "src/lib/installation.mjs",
       "src/lib/lineage.mjs",
       "src/lib/media.mjs",
       "src/lib/migration.mjs",
@@ -213,11 +243,28 @@
       "src/lib/progress.mjs",
       "src/lib/qualification.mjs",
       "src/lib/review.mjs",
+      "src/lib/video-compare.mjs",
       "src/lib/workspace.mjs",
       "src/mcp.mjs",
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:4c6576d452ce24cd347e5e54be0aa65775b41045ec466ce8a89d121a8921f860"
+    "digest": "sha256:ce74778a418bafc99679dcfb48c700cfdd63ef8a79397834bc8d716255b09f06"
+  },
+  "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
+  "presentation": {
+    "display_name_i18n": {
+      "zh-CN": "RedNote Steward",
+      "en-US": "RedNote Steward"
+    },
+    "description_i18n": {
+      "zh-CN": "管理小红书图文与视频发布、账号内容资产和中断任务恢复。",
+      "en-US": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service."
+    },
+    "session_routing_summary_i18n": {
+      "zh-CN": "检查发布队列、审阅准确内容、维护已有笔记，并从同一任务恢复执行。",
+      "en-US": "Inspect the publication queue, review exact content, maintain existing posts and resume the same task."
+    },
+    "home_shortcuts": []
   }
 }

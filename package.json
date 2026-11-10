@@ -36,7 +36,9 @@
     "app-contribution-adapter.json",
     "plugin.json",
     ".codex-plugin/",
-    "release-manifest.json"
+    "release-manifest.json",
+    "mcp.json",
+    ".agents/plugins/"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
