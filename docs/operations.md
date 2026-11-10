@@ -59,11 +59,11 @@ Unknown submission outcomes require readback before another write. A recorded `p
 
 ## Account catalog and inspection
 
-Creator inventory reads default to a bounded 1,000-note window. CLI
-`xhs-ops inventory` responses include `total`, `returned`, `complete`,
-`truncated` and `requestedLimit`; treat a response with `complete: false` as a
-partial read. The adapter keeps returning a bare row array for callers that do
-not request metadata.
+Creator inventory supports bounded requests up to 1,000 notes. Request the
+needed limit explicitly; CLI `xhs-ops inventory` responses include `total`,
+`returned`, `complete`, `truncated` and `requestedLimit`. Treat a response with
+`complete: false` as a partial read. The adapter keeps returning a bare row
+array for callers that do not request metadata.
 
 The catalog is a local projection keyed by stable account ID and platform note ID. Synchronizing platform inventory updates observed fields while preserving local organization and editorial decisions. It does not create publication tasks.
 
