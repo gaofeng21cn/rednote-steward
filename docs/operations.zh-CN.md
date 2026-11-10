@@ -75,6 +75,16 @@ xhs-ops catalog set NOTE_ID --account travel --series city-notes --episode 01 \
 
 可以将笔记关联到系列、集数、内容类型、素材路径或维护状态。系列用于组织连续内容，batch 用于组织一次操作，两者不同。Catalog 中的本地系列名不表示小红书平台有同名合集或排序能力。
 
+如果两篇笔记被确认使用同一份已批准内容，应保留平台表现更好的那篇作为 canonical，在一个事务中完成本地映射转移。命令会优先保留 canonical 已有的系列和素材信息；canonical 没有的字段才从被替代笔记带过来。系列或集数发生冲突时必须显式指定。被替代笔记仍保留在账号目录和平台证据中，维护状态变为 `superseded`，不会继续进入巡检候选或系列集数统计。事务会在共享数据库中保存私有回执，并在结果中返回：
+
+```bash
+xhs-ops catalog consolidate CANONICAL_NOTE_ID --account travel \
+  --superseded-note-id DUPLICATE_NOTE_ID --reason "保留平台表现更好的 canonical 笔记"
+xhs-ops catalog receipts --account travel --limit 20
+```
+
+这只整理本地目录，不隐藏、删除或编辑小红书上的任何笔记，也不会创建发布任务。
+
 巡检游标帮助按用户授权的时间范围做增量维护，但不会安排定期运行。每账号维护策略可以保存文风、话题和媒体偏好，不转换成自动质量分数或发布门禁。
 
 ```bash

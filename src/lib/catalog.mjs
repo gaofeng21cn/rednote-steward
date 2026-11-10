@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { transaction } from './db.mjs';
 
-export const MAINTENANCE_STATUSES = ['unreviewed', 'keep', 'needs_fact_check', 'needs_copy', 'needs_media', 'updated', 'waiting_evidence', 'video_pending'];
+export const MAINTENANCE_STATUSES = ['unreviewed', 'keep', 'needs_fact_check', 'needs_copy', 'needs_media', 'updated', 'waiting_evidence', 'video_pending', 'superseded'];
 
 function required(value, label) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required`);
@@ -45,6 +46,11 @@ export function ensureCatalogSchema(db) {
   );
   CREATE TABLE IF NOT EXISTS account_policies (
     account_user_id TEXT PRIMARY KEY, account TEXT NOT NULL, policy_json TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS catalog_receipts (
+    id TEXT PRIMARY KEY, account_user_id TEXT NOT NULL, account TEXT NOT NULL,
+    kind TEXT NOT NULL, canonical_note_id TEXT NOT NULL, superseded_note_id TEXT NOT NULL,
+    reason TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
   );`);
 }
 
@@ -100,6 +106,7 @@ export function updateCatalogNote(db, { accountUserId, noteId, ...changes }) {
   ]);
   for (const key of Object.keys(changes)) if (!fields.has(key)) throw new Error(`Unknown catalog field: ${key}`);
   if (changes.maintenanceStatus != null && !MAINTENANCE_STATUSES.includes(changes.maintenanceStatus)) throw new Error('Unknown maintenance status');
+  if (changes.maintenanceStatus === 'superseded') throw new Error('Use catalog consolidation to mark a duplicate note superseded');
   if (changes.seriesId != null && !/^[A-Za-z0-9_-]{1,128}$/.test(changes.seriesId)) throw new Error('seriesId must use letters, numbers, _ or -');
   const values = Object.entries(changes).map(([key,value]) => {
     if (value != null && typeof value !== 'string' && !(key === 'episode' && Number.isInteger(value))) throw new Error(`${key} must be a string or null`);
@@ -112,6 +119,84 @@ export function updateCatalogNote(db, { accountUserId, noteId, ...changes }) {
       .run(...values.map(([,value]) => value),timestamp(),userId,id);
     return { ok: true, note: jsonRow(db.prepare('SELECT * FROM catalog_notes WHERE account_user_id=? AND note_id=?').get(userId,id)), publicationTasksCreated: 0 };
   });
+}
+
+const CONSOLIDATION_FIELDS = new Map([
+  ['seriesId', 'series_id'], ['episode', 'episode'], ['contentType', 'content_type'], ['sourcePath', 'source_path'],
+]);
+
+function validateCatalogFieldChanges(changes) {
+  for (const key of Object.keys(changes)) if (!CONSOLIDATION_FIELDS.has(key)) throw new Error(`Unknown catalog field: ${key}`);
+  if (changes.seriesId != null && !/^[A-Za-z0-9_-]{1,128}$/.test(changes.seriesId)) throw new Error('seriesId must use letters, numbers, _ or -');
+  for (const [key, value] of Object.entries(changes)) {
+    if (value != null && typeof value !== 'string' && !(key === 'episode' && Number.isInteger(value))) throw new Error(`${key} must be a string or null`);
+  }
+  return Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, value == null ? null : String(value)]));
+}
+
+/** Atomically move local organization metadata to the canonical duplicate and retire the superseded note. */
+export function consolidateCatalogNotes(db, {
+  account, accountUserId, canonicalNoteId, supersededNoteId, reason,
+  seriesId, episode, contentType, sourcePath,
+} = {}) {
+  const userId = required(accountUserId, 'accountUserId'), alias = required(account, 'account');
+  const canonicalId = noteIdentity(canonicalNoteId), supersededId = noteIdentity(supersededNoteId);
+  if (canonicalId === supersededId) throw new Error('Canonical and superseded note IDs must differ');
+  const consolidationReason = required(reason, 'reason');
+  const explicit = validateCatalogFieldChanges({
+    ...(seriesId !== undefined ? { seriesId } : {}), ...(episode !== undefined ? { episode } : {}),
+    ...(contentType !== undefined ? { contentType } : {}), ...(sourcePath !== undefined ? { sourcePath } : {}),
+  });
+  ensureCatalogSchema(db);
+  return transaction(db, () => {
+    const canonical = db.prepare('SELECT * FROM catalog_notes WHERE account_user_id=? AND note_id=?').get(userId, canonicalId);
+    const superseded = db.prepare('SELECT * FROM catalog_notes WHERE account_user_id=? AND note_id=?').get(userId, supersededId);
+    if (!canonical) throw new Error('Canonical catalog note not found; import its platform identity first');
+    if (!superseded) throw new Error('Superseded catalog note not found; import its platform identity first');
+    if (canonical.maintenance_status === 'superseded') throw new Error('A superseded note cannot become canonical');
+    for (const key of ['seriesId', 'episode']) {
+      const column = CONSOLIDATION_FIELDS.get(key);
+      if (explicit[key] === undefined && canonical[column] != null && superseded[column] != null && canonical[column] !== superseded[column]) {
+        throw new Error(`Canonical and superseded ${key} mappings conflict; specify --${key === 'seriesId' ? 'series' : 'episode'}`);
+      }
+    }
+    const resolved = {};
+    for (const [key, column] of CONSOLIDATION_FIELDS) {
+      resolved[key] = explicit[key] !== undefined ? explicit[key] : (canonical[column] ?? superseded[column] ?? null);
+    }
+    const capturedAt = timestamp();
+    const receiptId = `catalog_${randomUUID().replaceAll('-', '')}`;
+    const canonicalBefore = jsonRow(canonical), supersededBefore = jsonRow(superseded);
+    db.prepare(`UPDATE catalog_notes SET series_id=?,episode=?,content_type=?,source_path=?,last_inspected_at=?
+      WHERE account_user_id=? AND note_id=?`).run(
+      resolved.seriesId, resolved.episode, resolved.contentType, resolved.sourcePath, capturedAt, userId, canonicalId,
+    );
+    db.prepare(`UPDATE catalog_notes SET series_id=NULL,episode=NULL,content_type=NULL,source_path=NULL,
+      maintenance_status='superseded',maintenance_reason=?,last_inspected_at=?
+      WHERE account_user_id=? AND note_id=?`).run(consolidationReason, capturedAt, userId, supersededId);
+    const canonicalAfter = jsonRow(db.prepare('SELECT * FROM catalog_notes WHERE account_user_id=? AND note_id=?').get(userId, canonicalId));
+    const supersededAfter = jsonRow(db.prepare('SELECT * FROM catalog_notes WHERE account_user_id=? AND note_id=?').get(userId, supersededId));
+    const payload = { canonicalNoteId: canonicalId, supersededNoteId: supersededId, reason: consolidationReason,
+      resolved, canonicalBefore, canonicalAfter, supersededBefore, supersededAfter };
+    db.prepare(`INSERT INTO catalog_receipts
+      (id,account_user_id,account,kind,canonical_note_id,superseded_note_id,reason,payload_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(receiptId, userId, alias, 'catalog-consolidation', canonicalId, supersededId,
+      consolidationReason, JSON.stringify(payload), capturedAt);
+    return { ok: true, account: alias, accountUserId: userId, canonical: canonicalAfter, superseded: supersededAfter,
+      receipt: { id: receiptId, kind: 'catalog-consolidation', createdAt: capturedAt, ...payload }, publicationTasksCreated: 0 };
+  });
+}
+
+export function catalogReceipts(db, { account, accountUserId, limit = 100 } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) throw new Error('limit must be an integer between 1 and 10000');
+  if (!hasTable(db, 'catalog_receipts')) return { ok: true, receipts: [] };
+  const where = [], params = [];
+  for (const [column, value] of [['account', account], ['account_user_id', accountUserId]]) {
+    if (value != null) { where.push(`${column}=?`); params.push(value); }
+  }
+  const rows = db.prepare(`SELECT * FROM catalog_receipts ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY created_at DESC,id DESC LIMIT ?`).all(...params, limit);
+  return { ok: true, receipts: rows.map(row => ({ ...row, payload: JSON.parse(row.payload_json) })) };
 }
 
 export function upsertSeries(db, { account, accountUserId, seriesId, title, description = '', expectedEpisodes = [] }) {
@@ -176,7 +261,7 @@ export function inspectionCandidates(db, { accountUserId, limit=6 } = {}) {
   if (policy?.inspectionMode==='off') return {ok:true,notes:[],cursor,reason:'Inspection is disabled for this account',schedulingCreated:false};
   const boundary=new Set(cursor?.boundaryNoteIds??[]);
   const rows=catalogNotes(db,{accountUserId:userId,limit:10_000}).notes.filter(note=> {
-    if (['keep','updated'].includes(note.maintenance_status)) return false;
+    if (['keep','updated','superseded'].includes(note.maintenance_status)) return false;
     if (note.content_type && (policy?.preserveContentTypes??[]).includes(note.content_type)) return false;
     if (!cursor) return true;
     const published=Date.parse(note.published_at??'');

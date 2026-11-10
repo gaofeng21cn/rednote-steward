@@ -84,6 +84,8 @@ Usage:
   xhs-ops catalog [--account ALIAS] [--series SERIES_ID] [--status STATUS] [--limit 100]
   xhs-ops catalog sync --account ALIAS [--limit 100]
   xhs-ops catalog set NOTE_ID --account ALIAS [--series ID] [--episode LABEL] [--content-type TYPE] [--maintenance-status STATUS] [--reason TEXT]
+  xhs-ops catalog consolidate CANONICAL_NOTE_ID --account ALIAS --superseded-note-id NOTE_ID --reason TEXT [--series ID] [--episode LABEL] [--content-type TYPE] [--source PATH]
+  xhs-ops catalog receipts --account ALIAS [--limit 100]
   xhs-ops catalog series --account ALIAS [--series ID] [--title TEXT --episodes 01,02]
   xhs-ops catalog policy --account ALIAS [--file POLICY_JSON]
   xhs-ops catalog cursor --account ALIAS [--watermark ISO8601 --boundary NOTE_ID,...]
@@ -215,11 +217,18 @@ export async function main(argv = process.argv.slice(2)) {
     const [subcommand = 'list', id] = positionals;
     if (subcommand === 'list') result = controller.catalog({ account: options.account, seriesId: options.series, contentType: options['content-type'], status: options.status, limit: integer(options.limit, 100) });
     else if (subcommand === 'sync') result = await controller.catalogSync(requireValue(options.account, 'catalog sync --account ALIAS'), { limit: integer(options.limit, 100) });
+    else if (subcommand === 'receipts') result = controller.catalogReceipts({ account: requireValue(options.account, 'catalog receipts --account ALIAS'), limit: integer(options.limit, 100) });
     else if (subcommand === 'set') {
       const changes = {};
       for (const [option, field] of [['series','seriesId'],['episode','episode'],['content-type','contentType'],['maintenance-status','maintenanceStatus'],['reason','reason'],['source','sourcePath']]) if (options[option] != null) changes[field] = options[option];
       if (!Object.keys(changes).length) throw new Error('catalog set requires at least one local metadata change');
       result = controller.catalogUpdate(requireValue(options.account, 'catalog set NOTE_ID --account ALIAS'), requireValue(id, 'catalog set NOTE_ID --account ALIAS'), changes);
+    } else if (subcommand === 'consolidate') {
+      result = controller.catalogConsolidate(requireValue(options.account, 'catalog consolidate CANONICAL_NOTE_ID --account ALIAS'), requireValue(id, 'catalog consolidate CANONICAL_NOTE_ID --account ALIAS'), {
+        supersededNoteId: requireValue(options['superseded-note-id'], 'catalog consolidate --superseded-note-id NOTE_ID'),
+        seriesId: options.series, episode: options.episode, contentType: options['content-type'], sourcePath: options.source,
+        reason: requireValue(options.reason, 'catalog consolidate --reason TEXT'),
+      });
     } else if (subcommand === 'series') {
       const alias = requireValue(options.account, 'catalog series --account ALIAS');
       result = options.title ? controller.seriesUpsert(alias, { seriesId: requireValue(options.series, 'catalog series --series ID --title TEXT'), title: options.title,

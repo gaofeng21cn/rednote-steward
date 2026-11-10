@@ -12,7 +12,7 @@ import { auditRows, reviewCandidates } from './audit.mjs';
 import { videoSourceChanged, videoSourceIdentity } from './media.mjs';
 import { createCoverEvidence, verifyCoverEvidence } from './cover-evidence.mjs';
 import { acquireAccountWrite, resolveAccountWrite } from './owner.mjs';
-import { importInventory, catalogNotes, updateCatalogNote, upsertSeries, seriesOverview,
+import { importInventory, catalogNotes, updateCatalogNote, consolidateCatalogNotes, catalogReceipts, upsertSeries, seriesOverview,
   inspectionCandidates, getAccountPolicy, setAccountPolicy, getInspectionCursor, setInspectionCursor } from './catalog.mjs';
 
 const now = () => new Date().toISOString();
@@ -396,6 +396,7 @@ export class Controller {
       notes: inventory.notes, capturedAt: now() }));
   }
   catalog(options = {}) { return this.withReadDatabase(db => catalogNotes(db, options)); }
+  catalogReceipts(options = {}) { return this.withReadDatabase(db => catalogReceipts(db, options)); }
   series(options = {}) { return this.withReadDatabase(db => seriesOverview(db, options), { ok: true, series: [] }); }
   inspection(alias, { limit = 6 } = {}) {
     const account = getAccount(alias);
@@ -405,6 +406,12 @@ export class Controller {
   catalogUpdate(alias, noteId, changes) {
     const account = getAccount(alias);
     return this.withDatabase(db => updateCatalogNote(db, { accountUserId: account.userId, noteId, ...changes }));
+  }
+  catalogConsolidate(alias, canonicalNoteId, options = {}) {
+    const account = getAccount(alias);
+    return this.withDatabase(db => consolidateCatalogNotes(db, {
+      ...options, account: alias, accountUserId: account.userId, canonicalNoteId,
+    }));
   }
   seriesUpsert(alias, options) {
     const account = getAccount(alias);

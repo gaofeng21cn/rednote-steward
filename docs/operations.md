@@ -79,6 +79,16 @@ xhs-ops catalog set NOTE_ID --account travel --series city-notes --episode 01 \
 
 Use the catalog to associate notes with a series and episode, content type, source path or maintenance status. Series and execution batches are separate concepts: a series groups related published content; a batch groups tasks operated together. Local series labels do not imply that Xiaohongshu supports a matching collection or ordering feature.
 
+When two notes contain the same approved content, keep the note with the better platform history as canonical and consolidate the local mapping in one transaction. The command carries existing canonical metadata forward when it is present, otherwise it adopts the superseded note's mapping; conflicting series or episode assignments require explicit values. The superseded note remains in the account catalog with its platform evidence, is marked `superseded`, and is excluded from inspection candidates and series episode counts. A private receipt is stored in the shared database and returned by the command:
+
+```bash
+xhs-ops catalog consolidate CANONICAL_NOTE_ID --account travel \
+  --superseded-note-id DUPLICATE_NOTE_ID --reason "Canonical note has the stronger platform history"
+xhs-ops catalog receipts --account travel --limit 20
+```
+
+This is local organization only. It does not hide, delete or edit either platform note and it does not create a publication task.
+
 Inspection cursors support authorized, incremental review. They identify which range has been inspected; they do not schedule work. Per-account policy can retain account voice, topic and media preferences without turning those preferences into automatic quality scores or a publishing gate.
 
 ```bash

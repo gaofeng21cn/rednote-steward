@@ -185,6 +185,16 @@ tool('catalog_update', 'Record local series, content type or maintenance judgmen
 }, ({ account, noteId, seriesId, episode, contentType, maintenanceStatus, reason, sourcePath }) => callCli(['catalog','set',noteId,'--account',account,
   ...(seriesId ? ['--series',seriesId] : []), ...(episode ? ['--episode',episode] : []), ...(contentType ? ['--content-type',contentType] : []),
   ...(maintenanceStatus ? ['--maintenance-status',maintenanceStatus] : []), ...(reason ? ['--reason',reason] : []), ...(sourcePath ? ['--source',sourcePath] : [])]), { readOnly: false });
+tool('catalog_consolidate', 'Atomically move local organization metadata to a canonical duplicate and mark the superseded note auditable without creating a publication task.', {
+  account, canonicalNoteId: noteId, supersededNoteId: noteId, seriesId: z.string().optional(), episode: z.string().optional(),
+  contentType: z.string().optional(), sourcePath: packagePath.optional(), reason: z.string().min(1),
+}, ({ account, canonicalNoteId, supersededNoteId, seriesId, episode, contentType, sourcePath, reason }) => callCli([
+  'catalog', 'consolidate', canonicalNoteId, '--account', account, '--superseded-note-id', supersededNoteId, '--reason', reason,
+  ...(seriesId ? ['--series', seriesId] : []), ...(episode ? ['--episode', episode] : []), ...(contentType ? ['--content-type', contentType] : []),
+  ...(sourcePath ? ['--source', sourcePath] : []),
+]), { readOnly: false });
+tool('catalog_receipts', 'Read local catalog consolidation receipts for an account.', { account, limit },
+  ({ account, limit }) => callCli(['catalog', 'receipts', '--account', account, '--limit', String(limit)]));
 tool('series_list', 'Read local series, expected episodes, platform notes and prepared tasks.', { account, seriesId: z.string().optional() },
   ({ account, seriesId }) => callCli(['catalog','series','--account',account,...(seriesId ? ['--series',seriesId] : [])]));
 tool('series_define', 'Define a local content series and its expected episode labels. This creates no publication task.', {

@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { openDatabase } from '../src/lib/db.mjs';
-import { importInventory,catalogNotes,updateCatalogNote,upsertSeries,seriesOverview,setInspectionCursor,getInspectionCursor,inspectionCandidates,setAccountPolicy } from '../src/lib/catalog.mjs';
+import { importInventory,catalogNotes,updateCatalogNote,consolidateCatalogNotes,catalogReceipts,upsertSeries,seriesOverview,setInspectionCursor,getInspectionCursor,inspectionCandidates,setAccountPolicy } from '../src/lib/catalog.mjs';
 
 const first='000000000000000000000001',second='000000000000000000000002';
 function fixture(t) {
@@ -45,6 +45,49 @@ test('series distinguish platform episodes from missing and prepared tasks',t=>{
   assert.deepEqual(result.missingEpisodes,['E03']);
   assert.equal(result.tasks[0].state,'queued');
   assert.equal(result.notes[0].note_id,first);
+});
+test('catalog consolidation atomically transfers mapping and preserves an auditable superseded note', t => {
+  const db = fixture(t);
+  importInventory(db, { account: 'travel', accountUserId: 'demo', notes: [
+    { id: first, title: 'Canonical note', published_at: '2026-11-01T00:00:00Z' },
+    { id: second, title: 'Duplicate note', published_at: '2026-11-02T00:00:00Z' },
+  ], capturedAt: '2026-11-09T00:00:00Z' });
+  updateCatalogNote(db, { accountUserId: 'demo', noteId: first, seriesId: 'city-notes', episode: 'E01', contentType: 'travel-photo', sourcePath: '/private/canonical/post.json' });
+  updateCatalogNote(db, { accountUserId: 'demo', noteId: second, seriesId: 'city-notes', episode: 'E01', contentType: 'travel-photo', sourcePath: '/private/duplicate/post.json' });
+  upsertSeries(db, { account: 'travel', accountUserId: 'demo', seriesId: 'city-notes', title: 'City notes', expectedEpisodes: ['E01'] });
+  const result = consolidateCatalogNotes(db, { account: 'travel', accountUserId: 'demo', canonicalNoteId: first,
+    supersededNoteId: second, reason: 'Canonical note has the stronger platform history' });
+  assert.equal(result.canonical.note_id, first);
+  assert.equal(result.canonical.series_id, 'city-notes');
+  assert.equal(result.canonical.episode, 'E01');
+  assert.equal(result.superseded.note_id, second);
+  assert.equal(result.superseded.series_id, null);
+  assert.equal(result.superseded.episode, null);
+  assert.equal(result.superseded.content_type, null);
+  assert.equal(result.superseded.source_path, null);
+  assert.equal(result.superseded.maintenance_status, 'superseded');
+  assert.equal(catalogNotes(db, { accountUserId: 'demo' }).notes.length, 2);
+  const overview = seriesOverview(db, { accountUserId: 'demo' }).series[0];
+  assert.deepEqual(overview.notes.map(note => note.note_id), [first]);
+  assert.deepEqual(overview.unpublishedEpisodes, []);
+  assert.deepEqual(inspectionCandidates(db, { accountUserId: 'demo' }).notes.map(note => note.note_id), [first]);
+  const receipts = catalogReceipts(db, { accountUserId: 'demo' }).receipts;
+  assert.equal(receipts.length, 1);
+  assert.equal(receipts[0].canonical_note_id, first);
+  assert.equal(receipts[0].superseded_note_id, second);
+  assert.equal(receipts[0].payload.reason, 'Canonical note has the stronger platform history');
+});
+test('catalog consolidation rejects conflicting series or episode mappings without changing either note', t => {
+  const db = fixture(t);
+  importInventory(db, { account: 'travel', accountUserId: 'demo', notes: [{ id: first }, { id: second }], capturedAt: '2026-11-09T00:00:00Z' });
+  updateCatalogNote(db, { accountUserId: 'demo', noteId: first, seriesId: 'series-a', episode: 'E01' });
+  updateCatalogNote(db, { accountUserId: 'demo', noteId: second, seriesId: 'series-b', episode: 'E02' });
+  assert.throws(() => consolidateCatalogNotes(db, { account: 'travel', accountUserId: 'demo', canonicalNoteId: first,
+    supersededNoteId: second, reason: 'Ambiguous duplicate' }), /mappings conflict/);
+  const notes = catalogNotes(db, { accountUserId: 'demo' }).notes;
+  assert.equal(notes.find(note => note.note_id === first).series_id, 'series-a');
+  assert.equal(notes.find(note => note.note_id === second).series_id, 'series-b');
+  assert.equal(catalogReceipts(db, { accountUserId: 'demo' }).receipts.length, 0);
 });
 test('incremental inspection uses timestamp plus boundary IDs and keeps original decisions',t=>{
   const db=fixture(t);
