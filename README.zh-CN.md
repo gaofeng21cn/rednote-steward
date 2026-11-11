@@ -54,7 +54,7 @@ RedNote Steward 把准备好的素材、账号配置、发布任务和平台结�
 
 ```bash
 opl packages install rednote-steward --json
-opl packages status rednote-steward --json
+opl packages status --package-id rednote-steward --json
 opl packages update rednote-steward --json
 ```
 
