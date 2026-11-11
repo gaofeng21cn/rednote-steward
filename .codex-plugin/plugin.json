@@ -1,6 +1,6 @@
 {
   "name": "rednote-steward",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "author": {
     "name": "OPL"

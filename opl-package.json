@@ -3,11 +3,11 @@
   "package_id": "rednote-steward",
   "display_name": "RedNote Steward",
   "publisher": "gaofeng21cn",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "source": "first_party_repo_local",
   "source_repo": "https://github.com/gaofeng21cn/rednote-steward.git",
   "package_role": "capability_package",
-  "publication_channel_admission": "development_only",
+  "publication_channel_admission": "admitted",
   "capability_abi": {
     "id": "rednote.steward.capabilities",
     "version": "1.0.0",
@@ -64,7 +64,7 @@
       "plugin_selector": "rednote-steward@rednote-steward",
       "executor_route": "codex_cli",
       "marketplace_source": "gaofeng21cn/rednote-steward",
-      "publication_ref": null
+      "publication_ref": "ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward:latest-stable"
     }
   },
   "app_contributions": {
@@ -208,6 +208,7 @@
       "adapters/opencli/xiaohongshu/steward-read-note.js",
       "adapters/opencli/xiaohongshu/topic-probe.js",
       "app-contribution-adapter.json",
+      "assets/branding/rednote-steward-logo-v2.png",
       "mcp.json",
       "package-lock.json",
       "package.json",
@@ -249,7 +250,7 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:a37809d9c48fddc77b65ecfb65c3ae6c463b398fb2db1417ea20e4fa73960ed5"
+    "digest": "sha256:ea2e0538af79e50086ac497a147539767aa4cbfd251f6557eedd351aa5249999"
   },
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "presentation": {
@@ -265,6 +266,9 @@
       "zh-CN": "检查发布队列、审阅准确内容、维护已有笔记，并从同一任务恢复执行。",
       "en-US": "Inspect the publication queue, review exact content, maintain existing posts and resume the same task."
     },
-    "home_shortcuts": []
-  }
+    "home_shortcuts": [],
+    "software_type": "application",
+    "icon_ref": "assets/branding/rednote-steward-logo-v2.png"
+  },
+  "management_scope": "local_product"
 }
