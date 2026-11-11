@@ -48,6 +48,24 @@ Account preferences and operational records live outside the installed code. Med
 
 The runner selects eligible accounts, so one unresolved task does not hold up an unrelated account. An account ID or Chrome profile has one local state owner, including when more than one `XHS_OPS_HOME` exists on the machine.
 
+## Install with OPL Software Center
+
+Install the released Package from OPL Software Center or its CLI:
+
+```bash
+opl packages install rednote-steward --json
+opl packages status rednote-steward --json
+opl packages update rednote-steward --json
+```
+
+The Package source is `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward`.
+Its CLI and MCP entries share the same controller, installed identity, and user
+state. Node.js 24+ and the browser connection remain runtime requirements.
+Development checkouts are explicit overrides, not software-center releases.
+
+The standalone installer below maintains existing native installations. Its
+historical archive versions remain separate from the current OPL Package release.
+
 ## Install on macOS
 
 With Node.js 24+ available, run:
