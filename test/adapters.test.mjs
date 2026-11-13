@@ -438,7 +438,10 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
         thumbnails = [{ src: 'blob:selected-cover', complete: true, naturalWidth: 100 }];
       }
     },
-    wait: async () => { throw new Error('Unexpected pending editor state'); },
+    wait: async options => {
+      if (options?.time === 1) return;
+      throw new Error('Unexpected pending editor state');
+    },
   };
   return { page, observed };
 }
