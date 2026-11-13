@@ -117,7 +117,7 @@ xhs-ops show TASK_ID
 
 An assistant can record an existing authorization for the requested batch; the `approve` command does not require another conversational approval. For video, use `video` and optional `cover` fields in place of `images`. Native topic names belong in `topics`; the adapter selects platform candidates during publishing.
 
-Replacing an existing video and its custom cover uses two saves on the same note: video and copy first, then the cover. Stage evidence supports recovery without uploading the saved video again.
+Replacing an existing video and its custom cover uses two saves on the same note: video and copy first, then the cover. After the cover confirmation click, the adapter waits up to 30 seconds for the dialog to close; if it remains open, the cover stage stops before title/body submission. Stage evidence supports recovery without uploading the saved video again.
 
 For a cover-only repair, use an `edit` package with `cover` and no `video`; the saved video is checked and preserved. `XHS_OPS_COVER_TIMEOUT` can raise the preview wait from its 120-second default up to 600 seconds.
 

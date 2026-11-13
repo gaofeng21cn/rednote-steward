@@ -121,7 +121,10 @@ Steward therefore saves the video and approved copy first, reads the saved video
 from the same note ID, then selects and saves the custom cover. Each stage invokes
 submission once. The cover-preview check defaults to 120 seconds and can be
 changed with `--cover-timeout` (10-600 seconds) when the platform's processing
-time differs. Final readback checks the recorded cover selection and a saved
+time differs. After the confirmation click, Steward separately waits up to 30
+seconds for the cover dialog to close. This close wait is bounded and is not
+controlled by `--cover-timeout`; if the dialog remains open, the cover stage
+stops before title/body submission. Final readback checks the recorded cover selection and a saved
 cover resource that differs from the cover before that stage. Xiaohongshu can
 transform the selected image to a new resource path. The receipt records path
 equality separately; image content remains untested. CDN host or signature changes
