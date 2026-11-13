@@ -107,10 +107,13 @@ export async function applyCover(page, cover, { previewTimeoutMs = 120_000 } = {
   if (!selected?.confirmationClicked || selected.filename !== filename) {
     throw new CommandExecutionError('Custom cover selection could not be confirmed; the cover stage remains unsubmitted');
   }
+  // The confirmation control may acknowledge the click before the modal
+  // finishes closing. Poll for a bounded interval so a slow close does not
+  // turn an unsubmitted composer into an ambiguous publish result.
   await waitFor(page, async () => Boolean(await page.evaluate(`() => {
     const dialog = document.querySelector(${JSON.stringify(ACTIVE_DIALOG_SELECTOR)});
     return !dialog || dialog.offsetParent === null;
-  }`)), 10_000, 400, 'cover confirmation');
+  }`)), 30_000, 400, 'cover confirmation');
   let after = before;
   await waitFor(page, async () => {
     after = await page.evaluate(previewSourceScript);
