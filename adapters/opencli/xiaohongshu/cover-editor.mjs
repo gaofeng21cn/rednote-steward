@@ -67,15 +67,11 @@ export async function applyCover(page, cover, { previewTimeoutMs = 120_000 } = {
   }`);
   if (!previewSelector) throw new CommandExecutionError('The custom cover preview is unavailable; the cover stage remains unsubmitted');
   await page.hover(previewSelector);
-  const opened = await page.evaluate(`() => {
-    const visible = el => Boolean(el && el.offsetParent !== null);
-    const target = Array.from(document.querySelectorAll('.cover-plugin-preview .cover-edit-entry'))
-      .find(visible);
-    if (!target) return false;
-    target.click();
-    return true;
-  }`);
-  if (!opened) throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
+  // The creator's Vue handler ignores a scripted HTMLElement.click(). Use the
+  // structured Browser Bridge click, which dispatches the native pointer
+  // sequence the cover editor expects.
+  const opened = await page.click('.cover-plugin-preview .cover-edit-entry', { nth: 0, firstOnMulti: false });
+  if (!opened?.clicked) throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
   await waitFor(page, async () => Boolean(await page.evaluate(`() => {
     const dialogs = Array.from(document.querySelectorAll(${JSON.stringify(DIALOG_SELECTOR)}))
       .filter(el => el.offsetParent !== null);
