@@ -72,7 +72,11 @@ function coverPage(options = {}) {
       const result = vm.runInNewContext(`(${source})`, { document });
       return typeof result === 'function' ? result() : result;
     },
-    hover: async () => { observed.hovered = true; },
+    hover: async (selector, options) => {
+      assert.equal(selector, '[data-steward-cover-preview="true"]');
+      assert.deepEqual(options, { nth: 0, firstOnMulti: false });
+      observed.hovered = true;
+    },
     click: async (selector, options) => {
       assert.equal(selector, '.cover-plugin-preview .cover-edit-entry');
       assert.deepEqual(options, { nth: 0, firstOnMulti: false });
@@ -95,7 +99,8 @@ function coverPage(options = {}) {
       }];
     },
     // A pending state is enough to test rejection without a real 30-second wait.
-    wait: async () => {
+    wait: async (waitOptions = {}) => {
+      if (waitOptions.time === 1) return;
       if (options.delayedClose && observed.delayedCloses > 0 && !closed) {
         closed = true;
         return;
