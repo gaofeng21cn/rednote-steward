@@ -372,7 +372,6 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
       throw new Error(`Unexpected dialog selector ${selector}`);
     },
   });
-  const entry = attrs({ click() { dialogOpen = true; thumbnails = [{ src: composer.cover, complete: true, naturalWidth: 100 }]; } });
   const host = attrs({ getBoundingClientRect: () => ({ width: 100, height: 30 }), _onPublish() {
     observed.submissions++;
     if (throwAtSubmit === observed.submissions) throw new Error('Connection lost after submit invocation');
@@ -389,7 +388,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     }
     location.href = 'https://creator.xiaohongshu.com/publish/editSuccess';
   } });
-  const all = [title, body, preview, videoInput, coverInput, complete, dialog, entry, host];
+  const all = [title, body, preview, videoInput, coverInput, complete, dialog, host];
   const document = {
     body: { innerText: '' },
     querySelectorAll(selector) {
@@ -399,7 +398,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
       if (selector === '.img-container' || selector === '.cover-plugin-preview img') return [];
       if (selector.startsWith('[data-steward-cover-preview]')) return all;
       if (selector === '.cover-plugin-preview .default, [class*="cover-preview"]') return [preview];
-      if (selector === '.cover-plugin-preview .cover-edit-entry') return [entry];
+      if (selector === '.cover-plugin-preview .cover-edit-entry') return [{}];
       if (selector.startsWith('[role="dialog"]')) return [dialog];
       if (selector === 'xhs-publish-btn') return [host];
       throw new Error(`Unexpected document list selector ${selector}`);
@@ -421,6 +420,14 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     fillText: async (selector, value) => { composer[selector.includes('placeholder') ? 'title' : 'body'] = value;
       return { filled: true, verified: true, actual: value }; },
     hover: async () => {},
+    click: async selector => {
+      if (selector === '.cover-plugin-preview .cover-edit-entry') {
+        dialogOpen = true;
+        thumbnails = [{ src: composer.cover, complete: true, naturalWidth: 100 }];
+        return { clicked: true, target: selector, matches_n: 1, match_level: 'exact' };
+      }
+      return { clicked: true, target: selector };
+    },
     setFileInput: async (files, selector) => {
       const stat = await fs.stat(files[0]);
       const file = { name: path.basename(files[0]), size: stat.size };

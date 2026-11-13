@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
 
 function coverPage(options = {}) {
-  const observed = { uploads: 0, confirmations: 0, outsideClicks: 0, hovered: false, delayedCloses: 0 };
+  const observed = { uploads: 0, confirmations: 0, outsideClicks: 0, hovered: false, delayedCloses: 0, entryClicks: 0 };
   let opened = false;
   let closed = false;
   let inputRemoved = false;
@@ -48,8 +48,7 @@ function coverPage(options = {}) {
   });
   const otherInput = node({ accept: 'image/png', closest: () => otherDialog });
   const otherDialog = node({ querySelectorAll: selector => selector === 'input[type="file"]' ? [otherInput] : [] });
-  const entry = node({ click() { assert.equal(observed.hovered, true); opened = true; } });
-  const all = [preview, input, dialog, wrapper, entry, button, outside];
+  const all = [preview, input, dialog, wrapper, button, outside];
   const document = {
     querySelector(selector) {
       if (selector.startsWith('.cover-plugin-preview .default[style')) return preview;
@@ -61,7 +60,7 @@ function coverPage(options = {}) {
       if (selector === '.cover-plugin-preview img') return [{ src: 'data:image/png;base64,decorative' }];
       if (selector.startsWith('[data-steward-cover-preview]')) return all;
       if (selector === '.cover-plugin-preview .default, [class*="cover-preview"]') return [preview];
-      if (selector === '.cover-plugin-preview .cover-edit-entry') return [entry];
+      if (selector === '.cover-plugin-preview .cover-edit-entry') return [{}];
       if (selector.startsWith('[role="dialog"]')) return options.ambiguous ? [dialog, otherDialog] : [wrapper, dialog];
       // There is a real enabled save button outside the dialog. It must never be used.
       if (selector === 'button, [role="button"]') return [outside, button];
@@ -74,6 +73,14 @@ function coverPage(options = {}) {
       return typeof result === 'function' ? result() : result;
     },
     hover: async () => { observed.hovered = true; },
+    click: async (selector, options) => {
+      assert.equal(selector, '.cover-plugin-preview .cover-edit-entry');
+      assert.deepEqual(options, { nth: 0, firstOnMulti: false });
+      assert.equal(observed.hovered, true);
+      observed.entryClicks++;
+      opened = true;
+      return { clicked: true, target: selector, matches_n: 1, match_level: 'exact' };
+    },
     setFileInput: async (files, selector) => {
       observed.uploads++;
       assert.equal(selector, 'input[data-rednote-cover-input="true"]');
@@ -102,7 +109,7 @@ function coverPage(options = {}) {
 test('cover selection uses the active dialog, decodes CSS URLs and defers persisted identity verification', async () => {
   const { page, observed } = coverPage();
   const result = await applyCover(page, '/synthetic/cover.png');
-  assert.deepEqual(observed, { uploads: 1, confirmations: 1, outsideClicks: 0, hovered: true, delayedCloses: 0 });
+  assert.deepEqual(observed, { uploads: 1, confirmations: 1, outsideClicks: 0, hovered: true, delayedCloses: 0, entryClicks: 1 });
   assert.equal(result.filename, 'cover.png');
   assert.equal(result.previousSource, 'https://example.invalid/before.jpg?token=old');
   assert.equal(result.source, 'https://example.invalid/selected.jpg?token=new');
