@@ -79,7 +79,9 @@ export async function applyCover(page, cover, { previewTimeoutMs = 120_000 } = {
   if (!editEntry || editEntry.count !== 1) {
     throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
   }
-  await page.hover(previewSelector);
+  // The selector also matches AI-cover preview cards. Hover the first visible
+  // element, which is the primary cover, exactly as the creator UI requires.
+  await page.hover(previewSelector, { nth: 0, firstOnMulti: false });
   const refreshedEntry = await page.evaluate(entryVisibilityScript('.cover-plugin-preview .cover-edit-entry'));
   if (!refreshedEntry || refreshedEntry.count !== 1 || refreshedEntry.visible?.[0] !== true) {
     throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
