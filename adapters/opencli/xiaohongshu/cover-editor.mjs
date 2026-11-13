@@ -2,6 +2,12 @@ import * as path from 'node:path';
 import { CommandExecutionError } from '@jackwener/opencli/errors';
 import { waitFor } from './editor-helpers.mjs';
 
+const entryVisibilityScript = selector => `(() => {
+  const entries = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+  const visible = entries.map(entry => Boolean(entry && entry.offsetParent !== null));
+  return { count: entries.length, visible };
+})()`;
+
 export async function attachFiles(page, files, selector) {
   if (typeof page.setFileInput !== 'function') throw new CommandExecutionError('Update OpenCLI Browser Bridge: local file upload is unavailable');
   // No retry after an ambiguous CDP upload. The controller retains the attempt.
@@ -66,10 +72,18 @@ export async function applyCover(page, cover, { previewTimeoutMs = 120_000 } = {
     return '[data-steward-cover-preview="true"]';
   }`);
   if (!previewSelector) throw new CommandExecutionError('The custom cover preview is unavailable; the cover stage remains unsubmitted');
+  // Keep hover and click on one resolved element. Re-resolving the entry can
+  // lose the hover-only visible state, producing a successful click on a
+  // hidden node without opening the editor.
+  const editEntry = await page.evaluate(entryVisibilityScript('.cover-plugin-preview .cover-edit-entry'));
+  if (!editEntry || editEntry.count !== 1) {
+    throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
+  }
   await page.hover(previewSelector);
-  // The creator's Vue handler ignores a scripted HTMLElement.click(). Use the
-  // structured Browser Bridge click, which dispatches the native pointer
-  // sequence the cover editor expects.
+  const refreshedEntry = await page.evaluate(entryVisibilityScript('.cover-plugin-preview .cover-edit-entry'));
+  if (!refreshedEntry || refreshedEntry.count !== 1 || refreshedEntry.visible?.[0] !== true) {
+    throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
+  }
   const opened = await page.click('.cover-plugin-preview .cover-edit-entry', { nth: 0, firstOnMulti: false });
   if (!opened?.clicked) throw new CommandExecutionError('The custom cover control is unavailable; the cover stage remains unsubmitted');
   await waitFor(page, async () => Boolean(await page.evaluate(`() => {
