@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { applyCover } from '../adapters/opencli/xiaohongshu/cover-editor.mjs';
 
 function coverPage(options = {}) {
-  const observed = { uploads: 0, confirmations: 0, outsideClicks: 0, hovered: false };
+  const observed = { uploads: 0, confirmations: 0, outsideClicks: 0, hovered: false, delayedCloses: 0 };
   let opened = false;
   let closed = false;
   let inputRemoved = false;
@@ -24,7 +24,8 @@ function coverPage(options = {}) {
   const input = node({ accept: 'image/png,image/jpeg', files: [], closest: () => dialog });
   const button = node({ innerText: '完成', disabled: Boolean(options.disabled), click() {
     observed.confirmations++;
-    closed = true;
+    if (options.delayedClose) observed.delayedCloses++;
+    else closed = true;
     preview.style.backgroundImage = options.unquoted
       ? 'url(https://example.invalid/selected.jpg?token=new)'
       : 'url("https://example.invalid/selected.jpg?token=new")';
@@ -87,7 +88,13 @@ function coverPage(options = {}) {
       }];
     },
     // A pending state is enough to test rejection without a real 30-second wait.
-    wait: async () => { throw new Error('Cover UI remains pending'); },
+    wait: async () => {
+      if (options.delayedClose && observed.delayedCloses > 0 && !closed) {
+        closed = true;
+        return;
+      }
+      throw new Error('Cover UI remains pending');
+    },
   };
   return { page, observed };
 }
@@ -95,7 +102,7 @@ function coverPage(options = {}) {
 test('cover selection uses the active dialog, decodes CSS URLs and defers persisted identity verification', async () => {
   const { page, observed } = coverPage();
   const result = await applyCover(page, '/synthetic/cover.png');
-  assert.deepEqual(observed, { uploads: 1, confirmations: 1, outsideClicks: 0, hovered: true });
+  assert.deepEqual(observed, { uploads: 1, confirmations: 1, outsideClicks: 0, hovered: true, delayedCloses: 0 });
   assert.equal(result.filename, 'cover.png');
   assert.equal(result.previousSource, 'https://example.invalid/before.jpg?token=old');
   assert.equal(result.source, 'https://example.invalid/selected.jpg?token=new');
@@ -118,6 +125,16 @@ test('cover selection succeeds after the platform removes the replaced file inpu
   assert.equal(observed.confirmations, 1);
   assert.equal(result.thumbnailSource, 'blob:https://example.invalid/new-upload');
   assert.equal(result.fileSelectionEvidence, 'attachment-acknowledged-and-fresh-thumbnail');
+});
+
+test('cover confirmation tolerates a delayed modal close after the selected preview appears', async () => {
+  const { page, observed } = coverPage({ delayedClose: true });
+  const result = await applyCover(page, '/synthetic/cover.png');
+  assert.equal(observed.uploads, 1);
+  assert.equal(observed.confirmations, 1);
+  assert.equal(observed.delayedCloses, 1);
+  assert.equal(result.selectionVerified, true);
+  assert.equal(result.source, 'https://example.invalid/selected.jpg?token=new');
 });
 
 for (const [description, options] of [
