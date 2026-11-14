@@ -81,7 +81,7 @@ export async function downloadStable({ destination, version = 'latest-stable', f
   return { source, version: descriptor.version, sourceRevision: payload.source_commit, artifactDigest: manifestDigest };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && await fs.realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [destination, version] = process.argv.slice(2);
   process.stdout.write(JSON.stringify(await downloadStable({ destination, version })) + '\n');
 }

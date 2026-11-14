@@ -61,3 +61,15 @@ test('archive links cannot escape the private staging directory', async t => {
   const f = await fixture(t, { unsafe: true });
   await assert.rejects(downloadStable({ destination: path.join(f.temporary, 'stage'), fetcher: f.fetcher }), /regular files/);
 });
+
+test('the CLI executes through a symbolic script path as used by macOS temporary directories', async t => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-oci-entry-'));
+  t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+  const link = path.join(temporary, 'download.mjs');
+  await fs.symlink(await fs.realpath(new URL('../scripts/download-stable.mjs', import.meta.url)), link);
+  await assert.rejects(exec(process.execPath, [link, 'relative-stage']), error => {
+    assert.equal(error.code, 1);
+    assert.match(error.stderr, /Use an absolute, new staging directory/);
+    return true;
+  });
+});
