@@ -3,7 +3,7 @@
   "package_id": "rednote-steward",
   "display_name": "RedNote Steward",
   "publisher": "gaofeng21cn",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "source": "first_party_repo_local",
   "source_repo": "https://github.com/gaofeng21cn/rednote-steward.git",
   "package_role": "capability_package",
@@ -252,7 +252,7 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:be11f743ea8e226cc2087ce143483084411d7b4d9fd9e56b67bb3003bcad2384"
+    "digest": "sha256:a803971f2c8617a524735d696d5910816dab6e1b76f3b8e4fe6b26d77f458839"
   },
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "presentation": {
