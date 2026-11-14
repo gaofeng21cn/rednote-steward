@@ -71,7 +71,7 @@ export async function downloadStable({ destination, version = 'latest-stable', f
     const relative = entry.path;
     if (path.posix.isAbsolute(relative) || relative.split('/').includes('..') || relative.includes('\\')) throw new Error('Unsafe payload path');
     const bytes = await fs.readFile(path.join(source, payload.source_root ?? '.', relative));
-    if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) throw new Error('Stable payload bytes differ');
+    if (digest(bytes) !== entry.sha256) throw new Error(`Stable payload bytes differ: ${relative}`);
   }
   const { createReleaseManifest } = await import(pathToFileURL(path.join(source, 'src/lib/build.mjs')).href);
   const installation = await createReleaseManifest(source);

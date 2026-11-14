@@ -10,7 +10,7 @@ import { downloadStable } from '../scripts/download-stable.mjs';
 const exec = promisify(execFile);
 const hash = body => 'sha256:' + createHash('sha256').update(body).digest('hex');
 
-async function fixture(t, { unsafe = false } = {}) {
+async function fixture(t, { unsafe = false, corruptPayload = false } = {}) {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-oci-fixture-'));
   t.after(() => fs.rm(temporary, { recursive: true, force: true }));
   const root = path.join(temporary, 'rednote-steward');
@@ -25,7 +25,7 @@ async function fixture(t, { unsafe = false } = {}) {
   const descriptor = Buffer.from(JSON.stringify({ package_id: 'rednote-steward', version: '1.2.3', codex_surface: { carrier_source_commit: source } }));
   const payload = Buffer.from(JSON.stringify({ package_id: 'rednote-steward', package_version: '1.2.3', source_commit: source,
     source_repo: 'https://github.com/gaofeng21cn/rednote-steward.git', source_root: '.',
-    files: [{ path: 'binary.png', sha256: createHash('sha256').update(Buffer.from([0, 255, 129])).digest('hex') }] }));
+    files: [{ path: 'binary.png', sha256: hash(Buffer.from(corruptPayload ? [0] : [0, 255, 129])) }] }));
   const blobs = [descriptor, payload, await fs.readFile(archive)];
   const layers = blobs.map((body, i) => ({ digest: hash(body), size: body.length, mediaType: 'application/vnd.onepersonlab.package.' + ['manifest.v1+json', 'payload.v1+json', 'source.v1+gzip'][i] }));
   const manifest = Buffer.from(JSON.stringify({ artifactType: 'application/vnd.onepersonlab.package.v1',
@@ -60,6 +60,11 @@ test('corrupted OCI manifests are refused before creating the extraction directo
 test('archive links cannot escape the private staging directory', async t => {
   const f = await fixture(t, { unsafe: true });
   await assert.rejects(downloadStable({ destination: path.join(f.temporary, 'stage'), fetcher: f.fetcher }), /regular files/);
+});
+
+test('payload file digests use the canonical prefixed format and reject changed bytes', async t => {
+  const f = await fixture(t, { corruptPayload: true });
+  await assert.rejects(downloadStable({ destination: path.join(f.temporary, 'stage'), fetcher: f.fetcher }), /Stable payload bytes differ: binary.png/);
 });
 
 test('the CLI executes through a symbolic script path as used by macOS temporary directories', async t => {
