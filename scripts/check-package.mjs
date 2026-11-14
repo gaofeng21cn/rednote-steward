@@ -12,7 +12,7 @@ const packOutput = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'
 }));
 const expectedName = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name;
 const pack = parsePackOutput(packOutput, expectedName);
-const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|release-manifest\.json$|package\.json$|opl-package\.json$|app-contribution-adapter\.json$|plugin\.json$|mcp\.json$|\.agents\/plugins\/marketplace\.json$|\.codex-plugin\/plugin\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
+const allowed = /^(src\/|adapters\/|skills\/|examples\/|scripts\/|docs\/|assets\/|install\.sh$|release-manifest\.json$|release-automation\.json$|package\.json$|opl-package\.json$|app-contribution-adapter\.json$|plugin\.json$|mcp\.json$|\.agents\/plugins\/marketplace\.json$|\.codex-plugin\/plugin\.json$|README(?:\.zh-CN)?\.md$|LICENSE$|NOTICE$)/;
 const privateFile = /(?:^|\/)(?:\.state|receipts|workers|cookies|accounts\.json|browser-profiles\.json|\.env(?:\..*)?)(?:\/|$)|\.(?:sqlite(?:-[\w]+)?|db|log)$/i;
 const localPath = /\/(?:Users|home)\/[a-zA-Z][\w.-]+\//;
 const credential = /(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/;

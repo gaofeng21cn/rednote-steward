@@ -38,7 +38,8 @@
     ".codex-plugin/",
     "release-manifest.json",
     "mcp.json",
-    ".agents/plugins/"
+    ".agents/plugins/",
+    "release-automation.json"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",

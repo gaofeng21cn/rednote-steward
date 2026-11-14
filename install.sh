@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Install a released source snapshot and its locked dependencies into user space.
-version="v0.2.3"
+version="latest-stable"
 source_dir=""
 skip_browser=0
 skip_integrations=0
@@ -16,7 +16,7 @@ while [ "$#" -gt 0 ]; do
     --skip-browser-setup) skip_browser=1; shift ;;
     --skip-integrations) skip_integrations=1; shift ;;
     --help|-h)
-      printf '%s\n' 'Usage: install.sh [--version v0.2.3] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
+      printf '%s\n' 'Usage: install.sh [--version latest-stable|vX.Y.Z] [--source DIR] [--skip-browser-setup] [--skip-integrations]' \
         'XHS_OPS_INSTALL_ROOT chooses the application directory; XHS_OPS_BIN_DIR chooses the command directory.'
       exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
@@ -24,7 +24,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$version" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
+  latest-stable|v[0-9]*.[0-9]*.[0-9]*) ;;
   *) printf 'Use a release tag such as v0.2.3: %s\n' "$version" >&2; exit 2 ;;
 esac
 case "$version" in *[!a-zA-Z0-9._-]*) printf 'Invalid release tag\n' >&2; exit 2 ;; esac
@@ -54,7 +54,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const [from, to] = process.argv.slice(2);
-const entries = ['package.json', 'package-lock.json', 'release-manifest.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin', 'mcp.json', '.agents/plugins'];
+const entries = ['package.json', 'package-lock.json', 'release-manifest.json', 'release-automation.json', 'src', 'adapters', 'skills', 'scripts', 'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples', 'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin', 'mcp.json', '.agents/plugins'];
 for (const name of entries) {
   try { await fs.cp(path.join(from, name), path.join(to, name), { recursive: true }); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -71,6 +71,13 @@ catch (error) {
 NODE
 else
   command -v curl >/dev/null 2>&1 || { printf '%s\n' 'curl is required.' >&2; exit 1; }
+  if [ "$version" = latest-stable ] || [ "${version#v}" != 0.1.0 ] && [ "${version#v}" != 0.2.3 ]; then
+    curl --fail --silent --show-error --location \
+      https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/scripts/download-stable.mjs \
+      -o "$stage/download-stable.mjs"
+    "$node_bin" "$stage/download-stable.mjs" "$stage/oci" "$version" > "$stage/selected.json"
+    mv "$stage/oci/source" "$stage/source"
+  else
   printf 'Downloading RedNote Steward %s...\n' "$version"
   if [ "$version" = 'v0.1.0' ]; then
     # The original release predates immutable installation manifests.
@@ -97,6 +104,7 @@ NODE
   if [ "$version" != 'v0.1.0' ] && [ ! -f "$stage/source/release-manifest.json" ]; then
     printf '%s\n' 'The selected release has no installation manifest.' >&2
     exit 1
+  fi
   fi
 fi
 
