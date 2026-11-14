@@ -19,9 +19,9 @@ never downloads a Git branch as a released version.
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh | bash
 ```
 
-The script installs the default release, `v0.2.3`, into your user directory. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
+The script installs the current `latest-stable` OCI Package into your user directory. Standalone and Software Center installations select the same version and source commit. It installs dependencies, adds command wrappers, prepares Browser Bridge, installs the generic Codex Skill, and registers the MCP Server when Codex CLI is available. Node.js 24+ is required; the installer can use an existing Homebrew installation when Node needs installing.
 
-Versioned installs download the release asset and its `SHA256SUMS`, then check the archive and package's `release-manifest.json` before selecting it. The manifest records the source revision and digest of public installation inputs. A local `--source` install generates the same manifest with its actual revision and dirty state. Explicit installation of the original `v0.1.0` retains its older source-archive route.
+Current and versioned installs verify the OCI manifest, source layer, and payload digests before selecting the package. The original v0.1.0 and v0.2.3 releases retain their historical download routes. The manifest records the source revision and digest of public installation inputs. A local `--source` install generates the same manifest with its actual revision and dirty state. Explicit installation of the original `v0.1.0` retains its older source-archive route.
 
 The installed commands are:
 

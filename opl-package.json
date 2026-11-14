@@ -209,11 +209,14 @@
       "adapters/opencli/xiaohongshu/topic-probe.js",
       "app-contribution-adapter.json",
       "assets/branding/rednote-steward-logo-v2.png",
+      "install.sh",
       "mcp.json",
       "package-lock.json",
       "package.json",
       "plugin.json",
+      "release-automation.json",
       "scripts/check-package.mjs",
+      "scripts/download-stable.mjs",
       "scripts/install-local.mjs",
       "scripts/lib/npm-pack-output.mjs",
       "scripts/package-lock.mjs",
@@ -250,7 +253,7 @@
       "src/opencli-runner.mjs",
       "src/setup.mjs"
     ],
-    "digest": "sha256:bea9f325f6aee23791a9ce40699b72047b4d0dc0992ebbf3c401a6b26b23779e"
+    "digest": "sha256:6982686c115d2a42d4020f1f223a078704d1fa895252919558538dcc83ad3edd"
   },
   "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
   "presentation": {

@@ -1,0 +1,38 @@
+{
+  "strategy": "daily_patch",
+  "prepare": [
+    [
+      "npm",
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund"
+    ],
+    [
+      "npm",
+      "run",
+      "lock:package"
+    ]
+  ],
+  "verify": [
+    [
+      "npm",
+      "test"
+    ],
+    [
+      "npm",
+      "run",
+      "check:package"
+    ]
+  ],
+  "version_files": [
+    {
+      "path": "package.json",
+      "kind": "json"
+    },
+    {
+      "path": "package-lock.json",
+      "kind": "json"
+    }
+  ]
+}
