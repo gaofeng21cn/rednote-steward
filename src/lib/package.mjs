@@ -92,7 +92,11 @@ export async function inspectPackage(input) {
   const replacesNoteId = raw.replacesNoteId ? noteId(raw.replacesNoteId, 'replacesNoteId') : null;
   const seriesId = raw.seriesId == null ? null : text(raw.seriesId, 'seriesId');
   if (seriesId && !/^[A-Za-z0-9_-]{1,128}$/.test(seriesId)) throw new Error('seriesId must use letters, numbers, _ or -');
-  const episode = raw.episode == null ? null : (Number.isInteger(raw.episode) && raw.episode > 0 ? raw.episode : text(raw.episode, 'episode'));
+  const episode = raw.episode == null
+    ? null
+    : (Number.isInteger(raw.episode) && raw.episode >= 0
+        ? raw.episode
+        : text(raw.episode, 'episode'));
   const contentType = raw.contentType == null ? null : text(raw.contentType, 'contentType', { max: 80 });
   if (raw.declarations != null) {
     if (!raw.declarations || typeof raw.declarations !== 'object' || Array.isArray(raw.declarations)) throw new Error('declarations must be an object');

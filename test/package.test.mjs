@@ -26,6 +26,16 @@ test('requires an explicit account alias', async t => {
   const dir = await fixture(t, { account: undefined });
   await assert.rejects(() => inspectPackage(dir), /account is required/);
 });
+test('accepts episode zero as a valid numeric series position', async t => {
+  const dir = await fixture(t, { seriesId: 'synthetic-series', episode: 0 });
+  const inspected = await inspectPackage(dir);
+  assert.equal(inspected.seriesId, 'synthetic-series');
+  assert.equal(inspected.episode, 0);
+});
+test('rejects negative numeric episode positions', async t => {
+  const dir = await fixture(t, { seriesId: 'synthetic-series', episode: -1 });
+  await assert.rejects(() => inspectPackage(dir), /episode must be a string/);
+});
 test('rejects a renamed unsupported image container', async t => {
   const dir = await fixture(t); await fs.writeFile(path.join(dir,'image.png'), 'not a PNG');
   await assert.rejects(() => inspectPackage(dir), /must contain JPEG, PNG or WebP/);
