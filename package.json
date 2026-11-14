@@ -1,6 +1,6 @@
 {
   "name": "rednote-steward",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Local publishing and account operations for Xiaohongshu, with a shared CLI and MCP server.",
   "type": "module",
   "license": "Apache-2.0",
