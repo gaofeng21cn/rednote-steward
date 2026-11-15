@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics, replaceVideo, readEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo, readEditor, openEditor, submitEdit } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
 import { PROGRESS_PREFIX } from '../src/lib/progress.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
@@ -308,6 +308,59 @@ test('video readback uses the real cover preview instead of a decorative data im
   const row = await readEditor({ evaluate: async source => evaluate(source, { document, location: { href: 'https://creator.xiaohongshu.com/publish/update' } }) });
   assert.equal(row.cover.url, 'https://example.invalid/cover.jpg');
   assert.equal(row.video.duration, null);
+});
+
+test('note readback allows a slow creator editor to finish loading', async () => {
+  const noteId = '000000000000000000000001';
+  let waits = 0;
+  const title = { offsetParent: {} };
+  const document = { querySelectorAll: selector => selector.includes('placeholder') ? (waits >= 1 ? [title] : []) : [] };
+  const originalNow = Date.now;
+  let clock = 0;
+  Date.now = () => clock;
+  const page = {
+    goto: async () => {},
+    wait: async options => {
+      assert.equal(options.time, 0.5);
+      waits++;
+      clock += 30_000;
+    },
+    evaluate: source => evaluate(source, { document, location: { href: `https://creator.xiaohongshu.com/publish/update?id=${noteId}&noteType=video` } }),
+  };
+  try {
+    await openEditor(page, noteId, 'video');
+    assert.equal(waits, 1);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('edit confirmation allows a slow creator success page', async () => {
+  const originalNow = Date.now;
+  let clock = 0;
+  let polls = 0;
+  Date.now = () => clock;
+  const page = {
+    wait: async options => {
+      assert.equal(options.time, 0.5);
+      clock += 30_000;
+    },
+    evaluate: async source => {
+      if (String(source).includes('xhs-publish-btn')) {
+        return { ok: true, via: 'component-method', name: '_onPublish' };
+      }
+      polls++;
+      return polls >= 2
+        ? 'https://creator.xiaohongshu.com/publish/editSuccess'
+        : 'https://creator.xiaohongshu.com/publish/update?id=000000000000000000000001';
+    },
+  };
+  try {
+    assert.equal(await submitEdit(page), '_onPublish');
+    assert.equal(polls, 2);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('video edit rejects an image target before changing its fields or media', async t => {

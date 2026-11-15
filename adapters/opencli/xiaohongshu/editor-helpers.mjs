@@ -140,7 +140,7 @@ async function waitForEditor(page) {
           return title ? 'ready' : '';
         })(${JSON.stringify(TITLE_SELECTOR)})`,
       )),
-    15000,
+    60000,
     500,
     'Xiaohongshu note editor',
   );
@@ -524,7 +524,7 @@ async function submitEdit(page) {
       const url = String(await page.evaluate('location.href'));
       return url.includes(SUCCESS_PATH);
     },
-    20000,
+    60000,
     500,
     'Xiaohongshu edit confirmation',
   );
