@@ -140,7 +140,7 @@ async function waitForEditor(page) {
           return title ? 'ready' : '';
         })(${JSON.stringify(TITLE_SELECTOR)})`,
       )),
-    15000,
+    60000,
     500,
     'Xiaohongshu note editor',
   );

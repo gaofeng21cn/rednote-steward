@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics, replaceVideo, readEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo, readEditor, openEditor } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
 import { PROGRESS_PREFIX } from '../src/lib/progress.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
@@ -308,6 +308,23 @@ test('video readback uses the real cover preview instead of a decorative data im
   const row = await readEditor({ evaluate: async source => evaluate(source, { document, location: { href: 'https://creator.xiaohongshu.com/publish/update' } }) });
   assert.equal(row.cover.url, 'https://example.invalid/cover.jpg');
   assert.equal(row.video.duration, null);
+});
+
+test('note readback allows a slow creator editor to finish loading', async () => {
+  const noteId = '000000000000000000000001';
+  let waits = 0;
+  const title = { offsetParent: {} };
+  const document = { querySelectorAll: selector => selector.includes('placeholder') ? (waits >= 2 ? [title] : []) : [] };
+  const page = {
+    goto: async () => {},
+    wait: async options => {
+      assert.equal(options.time, 0.5);
+      waits++;
+    },
+    evaluate: source => evaluate(source, { document, location: { href: `https://creator.xiaohongshu.com/publish/update?id=${noteId}&noteType=video` } }),
+  };
+  await openEditor(page, noteId, 'video');
+  assert.equal(waits, 2);
 });
 
 test('video edit rejects an image target before changing its fields or media', async t => {
