@@ -271,69 +271,112 @@ async function focusBodyEnd(page) {
       range.collapse(false);
       selection?.removeAllRanges();
       selection?.addRange(range);
-      return true;
+      return editor.querySelectorAll(':scope > p').length;
     })(${JSON.stringify(BODY_SELECTOR)})`,
   );
-  if (!focused) throw new CommandExecutionError('Could not focus the end of the note body');
+  if (!Number.isInteger(focused)) throw new CommandExecutionError('Could not focus the end of the note body');
+  return focused;
+}
+
+async function discardTopicQuery(page, paragraphCount, topic) {
+  await page.pressKey('Escape');
+  const selected = await page.evaluate(
+    `((selector, paragraphCount, topic) => {
+      const editor = Array.from(document.querySelectorAll(selector))
+        .find((element) => element.offsetParent !== null);
+      if (!editor) return 'unknown';
+      const paragraphs = editor.querySelectorAll(':scope > p');
+      if (paragraphs.length === paragraphCount) return 'empty';
+      const paragraph = paragraphs[paragraphCount];
+      if (paragraphs.length !== paragraphCount + 1 || paragraph !== editor.lastElementChild) return 'unknown';
+      const text = (paragraph.textContent || '').replace(/^#/, '').trim();
+      if (paragraph.querySelector('a.tiptap-topic') || (text && text !== topic)) return 'unknown';
+      if (!paragraph.textContent) return 'empty';
+      editor.focus();
+      const selection = window.getSelection();
+      if (!selection) return 'unknown';
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return 'selected';
+    })(${JSON.stringify(BODY_SELECTOR)}, ${paragraphCount}, ${JSON.stringify(topic)})`,
+  );
+  if (selected === 'selected') await page.pressKey('Backspace');
+  else if (selected !== 'empty') throw new CommandExecutionError('Could not isolate the temporary topic query');
 }
 
 async function addTopic(page, topic) {
-  await focusBodyEnd(page);
-  await page.pressKey('Enter');
-  // Let Tiptap commit the new paragraph before opening the React picker.
-  // Opening both in the same event loop turn intermittently yields an empty
-  // candidate list.
-  await page.wait({ time: 0.3 });
-  const picker = await page.evaluate(
-    `(() => {
-      const candidates = Array.from(document.querySelectorAll('button'));
-      const target = candidates.find((button) => (button.innerText || '').includes('话题'));
-      if (!target) return false;
-      target.click();
-      return true;
-    })()`,
-  );
-  if (!picker) {
-    throw new CommandExecutionError('Could not open the Xiaohongshu topic picker');
-  }
-  await page.wait({ time: 0.3 });
-
   if (typeof page.insertText !== 'function') {
     throw new CommandExecutionError('Native text insertion is unavailable in this Browser Bridge version');
   }
-  await page.insertText(topic);
-  await page.wait({ time: 0.8 });
-  let choice = null;
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    choice = await page.evaluate(
-      `(wanted => {
-        const norm = (value) => String(value || '').replace(/^#/, '').replace(/\\s+/g, '').trim();
-        const container = document.querySelector('#creator-editor-topic-container');
-        if (!container) return { ok: false, items: [] };
-        const items = Array.from(container.querySelectorAll('.item'));
-        const labels = items.map((item) => {
-          const name = item.querySelector('.name');
-          return (name?.textContent || item.textContent || '').trim();
-        });
-        const index = labels.findIndex((label) => norm(label) === norm(wanted));
-        if (index >= 0) items[index].click();
-        return { ok: index >= 0, index, selected: index >= 0, items: labels.slice(0, 12) };
-      })(${JSON.stringify(topic)})`,
-    );
-    if (choice?.ok) break;
-    await page.wait({ time: 0.5 });
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const paragraphCount = await focusBodyEnd(page);
+    await page.pressKey('Enter');
+    let choice;
+    let suggestions = [];
+    try {
+      // Let Tiptap commit the new paragraph before opening the React picker.
+      // Opening both in the same event loop turn intermittently yields an empty
+      // candidate list.
+      await page.wait({ time: 0.3 });
+      const picker = await page.evaluate(
+        `(() => {
+          const candidates = Array.from(document.querySelectorAll('button'));
+          const target = candidates.find((button) => (button.innerText || '').includes('话题'));
+          if (!target) return false;
+          target.click();
+          return true;
+        })()`,
+      );
+      if (!picker) {
+        throw new CommandExecutionError('Could not open the Xiaohongshu topic picker');
+      }
+      await page.wait({ time: 0.3 });
+
+      await page.insertText(topic);
+      await page.wait({ time: 0.8 });
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        choice = await page.evaluate(
+          `(wanted => {
+            const norm = (value) => String(value || '').replace(/^#/, '').replace(/\\s+/g, '').trim();
+            const container = document.querySelector('#creator-editor-topic-container');
+            if (!container) return { ok: false, items: [] };
+            const items = Array.from(container.querySelectorAll('.item'));
+            const labels = items.map((item) => {
+              const name = item.querySelector('.name');
+              return (name?.textContent || item.textContent || '').trim();
+            });
+            const index = labels.findIndex((label) => norm(label) === norm(wanted));
+            if (index >= 0) items[index].click();
+            return { ok: index >= 0, index, selected: index >= 0, items: labels.slice(0, 12) };
+          })(${JSON.stringify(topic)})`,
+        );
+        if (choice?.ok) break;
+        if (choice?.items?.length) suggestions = choice.items;
+        await page.wait({ time: 0.5 });
+      }
+    } catch (error) {
+      await discardTopicQuery(page, paragraphCount, topic);
+      throw error;
+    }
+    if (choice?.ok) {
+      await page.wait({ time: 0.6 });
+      return;
+    }
+    await discardTopicQuery(page, paragraphCount, topic);
+    if (suggestions.length || attempt === maxAttempts) {
+      throw new CommandExecutionError(
+        `Topic "${topic}" was not found exactly. Visible suggestions: ${suggestions.join(' | ') || 'none'}`,
+      );
+    }
+    emitProgress('selected', { kind: 'topic_candidate_empty_retry', topic, attempt, maxAttempts });
   }
-  if (!choice?.ok) {
-    throw new CommandExecutionError(
-      `Topic "${topic}" was not found exactly. Visible suggestions: ${(choice?.items || []).join(' | ') || 'none'}`,
-    );
-  }
-  await page.wait({ time: 0.6 });
 }
 
 async function replaceTopics(page, topics) {
-  if (!topics.length) return;
   for (const topic of topics) await addTopic(page, topic);
 }
 

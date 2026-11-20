@@ -115,7 +115,15 @@ export async function publishNote(page, kwargs) {
   const cover = input.cover ? await applyCover(page, input.cover) : null;
   await fillTitle(page, input.title);
   await fillBody(page, input.body);
-  await replaceTopics(page, input.topics);
+  try {
+    await replaceTopics(page, input.topics);
+  } catch (error) {
+    // Topic retries create temporary paragraphs in the unsaved composer. If
+    // exact selection still fails, restore the frozen body before returning so
+    // a later recovery attempt cannot inherit the probe text.
+    await fillBody(page, input.body);
+    throw error;
+  }
   const declarations = await applyDeclarations(page, input.declarations);
   const prepared = await readEditor(page);
   if (!prepared || prepared.title !== input.title || normalizeForComparison(prepared.body) !== normalizeForComparison(input.body) || !sameTopics(prepared.topics, input.topics) || prepared.topics.some(topic => !topic.id)) {
