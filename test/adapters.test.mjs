@@ -104,28 +104,77 @@ test('native topics need exact names and platform IDs; empty removes all', () =>
   assert.equal(sameTopics([{ id: 'topic-1', name: '旅行' }], []), false);
 });
 
-test('empty topic candidate lists are retried without inserting text topics', async () => {
+function topicPage(t, getCandidates) {
+  let now = 0;
   let searches = 0;
-  const button = { innerText: '添加话题', click: () => {} };
-  const editor = { offsetParent: {}, focus: () => {} };
+  let selected;
+  t.mock.method(Date, 'now', () => now);
+  const paragraph = (textContent, native = false) => ({
+    textContent,
+    querySelector: () => native ? { id: 'prior' } : null,
+  });
+  const paragraphs = [paragraph('Frozen body'), paragraph('Prior topic', true)];
+  const editor = {
+    offsetParent: {},
+    focus: () => {},
+    querySelectorAll: () => paragraphs,
+    get lastElementChild() { return paragraphs.at(-1); },
+  };
   const page = {
-    wait: async () => {},
-    pressKey: async () => {},
-    insertText: async () => {},
+    wait: async ({ time }) => { now += time * 1000; },
+    pressKey: async key => {
+      if (key === 'Enter') paragraphs.push(paragraph(''));
+      if (key === 'Backspace') selected.textContent = '';
+    },
+    insertText: async text => { paragraphs.at(-1).textContent = '#' + text; },
     evaluate: async source => {
-      if (source.includes('document.querySelectorAll(\'button\')')) return true;
-      if (source.includes('range.selectNodeContents')) return true;
-      if (source.includes('creator-editor-topic-container')) {
+      if (source.includes("document.querySelectorAll('button')")) {
         searches++;
-        if (searches === 1) return { ok: false, items: [] };
-        return { ok: true, items: ['#痛经'] };
+        return true;
       }
-      if (source.includes('button')) return [button];
-      return [editor];
+      if (source.includes('creator-editor-topic-container')) {
+        const candidate = getCandidates(searches, now);
+        if (candidate.ok) paragraphs[paragraphs.length - 1] = paragraph('Native topic', true);
+        return candidate;
+      }
+      if (source.includes('range.selectNodeContents')) {
+        return vm.runInNewContext(source, {
+          document: {
+            querySelectorAll: () => [editor],
+            createRange: () => ({ selectNodeContents: node => { selected = node; }, collapse: () => {} }),
+          },
+          window: { getSelection: () => ({ removeAllRanges: () => {}, addRange: () => {} }) },
+        });
+      }
+      throw new Error('Unexpected browser operation');
     },
   };
-  await replaceTopics(page, ['痛经']);
-  assert.equal(searches, 2);
+  return { page, paragraphs, searches: () => searches };
+}
+
+test('a full empty wait retries the search and clears its query before selection', async t => {
+  const fixture = topicPage(t, searches => searches === 1
+    ? { ok: false, items: [] }
+    : { ok: true, items: ['#痛经'] });
+  await replaceTopics(fixture.page, ['痛经']);
+  assert.equal(fixture.searches(), 2);
+  assert.deepEqual(fixture.paragraphs.map(p => p.textContent).filter(Boolean),
+    ['Frozen body', 'Prior topic', 'Native topic']);
+});
+
+test('a nonmatching list is not retried after the renderer empties', async t => {
+  const fixture = topicPage(t, (_searches, now) =>
+    ({ ok: false, items: now < 2000 ? ['#Unrelated'] : [] }));
+  await assert.rejects(replaceTopics(fixture.page, ['痛经']), /Visible suggestions: #Unrelated/);
+  assert.equal(fixture.searches(), 1);
+  assert.deepEqual(fixture.paragraphs.map(p => p.textContent).filter(Boolean), ['Frozen body', 'Prior topic']);
+});
+
+test('three empty searches leave the existing body and native topics intact', async t => {
+  const fixture = topicPage(t, () => ({ ok: false, items: [] }));
+  await assert.rejects(replaceTopics(fixture.page, ['痛经']), /Visible suggestions: none/);
+  assert.equal(fixture.searches(), 3);
+  assert.deepEqual(fixture.paragraphs.map(p => p.textContent).filter(Boolean), ['Frozen body', 'Prior topic']);
 });
 
 test('failed topic selection restores the frozen body before returning', async t => {
@@ -147,6 +196,8 @@ test('failed topic selection restores the frozen body before returning', async t
       return { filled: true, verified: true, actual: text };
     },
     evaluate: async source => {
+      if (source.includes('paragraphCount, topic')) return 'empty';
+      if (source.includes('range.selectNodeContents')) return 1;
       if (source.includes("document.querySelectorAll('button')")) return true;
       if (source.includes('creator-editor-topic-container')) {
         if (inserts > 0) throw new Error('topic failure');
@@ -159,29 +210,6 @@ test('failed topic selection restores the frozen body before returning', async t
   await assert.rejects(publishNote(page, { title: snapshot.title, content: snapshot.body,
     images: image, topics: '痛经' }), /topic failure/);
   assert.equal(fills, 3);
-});
-
-test('topic replacement clears temporary queries and restores prior selections', async () => {
-  let searches = 0, clears = 0;
-  const editor = { offsetParent: {}, focus: () => {} };
-  const page = {
-    wait: async () => {}, pressKey: async () => {}, insertText: async () => {},
-    evaluate: async source => {
-      if (source.includes('a.tiptap-topic')) { clears++; return true; }
-      if (source.includes('range.selectNodeContents')) return true;
-      if (source.includes("document.querySelectorAll('button')")) return true;
-      if (source.includes('creator-editor-topic-container')) {
-        searches++;
-        if (searches === 1) return { ok: true, items: ['#痛经'] };
-        if (searches === 2) throw new Error('temporary topic query');
-        return { ok: true, items: ['#痛经'] };
-      }
-      return [editor];
-    },
-  };
-  await assert.rejects(replaceTopics(page, ['痛经', '医学科普']), /temporary topic query/);
-  assert.equal(clears, 1);
-  assert.equal(searches, 3);
 });
 
 test('account identity uses creator response stable ID, never nickname', async () => {
