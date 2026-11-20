@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import vm from 'node:vm';
 import { validatePublishInput, attachFiles, submitOnce, selectPublishSurface, uploadStateScript, publishNote } from '../adapters/opencli/xiaohongshu/steward-publish.js';
 import { creatorIdentityScript, readCreatorIdentity } from '../adapters/opencli/xiaohongshu/steward-account.js';
-import { sameTopics, replaceVideo, readEditor, openEditor, submitEdit } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
+import { sameTopics, replaceVideo, readEditor, openEditor, submitEdit, replaceTopics } from '../adapters/opencli/xiaohongshu/editor-helpers.mjs';
 import { videoSourceChanged } from '../src/lib/media.mjs';
 import { PROGRESS_PREFIX } from '../src/lib/progress.mjs';
 import { assertCreatorLocation } from '../adapters/opencli/xiaohongshu/page-check.mjs';
@@ -102,6 +102,86 @@ test('native topics need exact names and platform IDs; empty removes all', () =>
   assert.equal(sameTopics([{ id: 'topic-1', name: '#旅行' }], ['旅行']), false);
   assert.equal(sameTopics([], []), true);
   assert.equal(sameTopics([{ id: 'topic-1', name: '旅行' }], []), false);
+});
+
+test('empty topic candidate lists are retried without inserting text topics', async () => {
+  let searches = 0;
+  const button = { innerText: '添加话题', click: () => {} };
+  const editor = { offsetParent: {}, focus: () => {} };
+  const page = {
+    wait: async () => {},
+    pressKey: async () => {},
+    insertText: async () => {},
+    evaluate: async source => {
+      if (source.includes('document.querySelectorAll(\'button\')')) return true;
+      if (source.includes('range.selectNodeContents')) return true;
+      if (source.includes('creator-editor-topic-container')) {
+        searches++;
+        if (searches === 1) return { ok: false, items: [] };
+        return { ok: true, items: ['#痛经'] };
+      }
+      if (source.includes('button')) return [button];
+      return [editor];
+    },
+  };
+  await replaceTopics(page, ['痛经']);
+  assert.equal(searches, 2);
+});
+
+test('failed topic selection restores the frozen body before returning', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-topic-restore-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const image = path.join(dir, 'image.png');
+  await fs.writeFile(image, 'synthetic image');
+  let fills = 0, inserts = 0;
+  const snapshot = { url: 'https://creator.xiaohongshu.com/publish/publish', title: 'A walk',
+    body: 'A quiet morning', topics: [], imageCount: 1, mediaType: 'image', images: [] };
+  const responses = [snapshot.url, true, true,
+    { pending: false, errors: [], imageCount: 1, videoPresent: false }, 'ready', 'found'];
+  const page = {
+    goto: async () => {}, wait: async () => {}, pressKey: async () => {},
+    insertText: async () => { inserts++; },
+    setFileInput: async () => {},
+    fillText: async (_selector, text) => {
+      fills++;
+      return { filled: true, verified: true, actual: text };
+    },
+    evaluate: async source => {
+      if (source.includes("document.querySelectorAll('button')")) return true;
+      if (source.includes('creator-editor-topic-container')) {
+        if (inserts > 0) throw new Error('topic failure');
+        return { ok: false, items: [] };
+      }
+      if (!responses.length) return { ok: false, items: [] };
+      return responses.shift();
+    },
+  };
+  await assert.rejects(publishNote(page, { title: snapshot.title, content: snapshot.body,
+    images: image, topics: '痛经' }), /topic failure/);
+  assert.equal(fills, 3);
+});
+
+test('topic replacement clears temporary queries and restores prior selections', async () => {
+  let searches = 0, clears = 0;
+  const editor = { offsetParent: {}, focus: () => {} };
+  const page = {
+    wait: async () => {}, pressKey: async () => {}, insertText: async () => {},
+    evaluate: async source => {
+      if (source.includes('a.tiptap-topic')) { clears++; return true; }
+      if (source.includes('range.selectNodeContents')) return true;
+      if (source.includes("document.querySelectorAll('button')")) return true;
+      if (source.includes('creator-editor-topic-container')) {
+        searches++;
+        if (searches === 1) return { ok: true, items: ['#痛经'] };
+        if (searches === 2) throw new Error('temporary topic query');
+        return { ok: true, items: ['#痛经'] };
+      }
+      return [editor];
+    },
+  };
+  await assert.rejects(replaceTopics(page, ['痛经', '医学科普']), /temporary topic query/);
+  assert.equal(clears, 1);
+  assert.equal(searches, 3);
 });
 
 test('account identity uses creator response stable ID, never nickname', async () => {
