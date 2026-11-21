@@ -99,10 +99,14 @@ cli({
       };
     }
     if (before.title !== title) await fillTitle(page, title);
-    if (normalizeForComparison(before.body) !== normalizeForComparison(content)) {
+    const topicsChanged = !sameTopics(before.topics, topics);
+    // Topic nodes live inside the rich-text body. Rebuild the frozen body
+    // before adding a different topic set; otherwise the picker can append new
+    // nodes while retaining old ones.
+    if (normalizeForComparison(before.body) !== normalizeForComparison(content) || topicsChanged) {
       await fillBody(page, content);
     }
-    if (!sameTopics(before.topics, topics)) await replaceTopics(page, topics);
+    if (topicsChanged) await replaceTopics(page, topics);
     await replaceImages(page, images);
     const declarations = await applyDeclarations(page, desiredDeclarations);
 
@@ -179,7 +183,10 @@ cli({
       if (normalizeForComparison(videoSaved.body) !== normalizeForComparison(content)) {
         await fillBody(page, content);
       }
-      if (!sameTopics(videoSaved.topics, topics)) await replaceTopics(page, topics);
+      if (!sameTopics(videoSaved.topics, topics)) {
+        await fillBody(page, content);
+        await replaceTopics(page, topics);
+      }
       await applyDeclarations(page, desiredDeclarations);
       const coverPrepared = await readEditor(page);
       if (!coverPrepared || coverPrepared.title !== title

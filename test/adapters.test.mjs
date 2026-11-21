@@ -652,6 +652,18 @@ test('video and cover save in two stages and verify the same reopened note', asy
   assert.ok(f.observed.opens.every(url => url.includes('id=000000000000000000000001')));
 });
 
+test('changing topics rebuilds the body before native topic replacement', async t => {
+  const f = await stagedEditFixture(t);
+  const originalFillText = f.page.fillText;
+  let fills = 0;
+  f.page.fillText = async (...args) => {
+    fills++;
+    return originalFillText(...args);
+  };
+  await f.run();
+  assert.ok(fills >= 2);
+});
+
 test('custom cover timeout is configurable and invalid values fail before browser use', async t => {
   const command = getRegistry().get('xiaohongshu/edit-note');
   const option = command.args.find(arg => arg.name === 'cover-timeout');
