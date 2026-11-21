@@ -500,21 +500,39 @@ test('renewed CDN signatures and blob previews do not prove a changed saved vide
 
 // Exercise the registered adapter against an actual DOM-shaped editor. Each
 // goto reloads persisted state, so preview changes cannot masquerade as saves.
-function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', throwAtSubmit = 0 } = {}) {
-  const observed = { opens: [], submissions: 0, videoUploads: 0, coverUploads: 0, coverConfirmations: 0 };
+function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', throwAtSubmit = 0,
+  initialTopics = [], savedTopicsAfterVideo } = {}) {
+  const observed = { opens: [], submissions: 0, videoUploads: 0, coverUploads: 0,
+    coverConfirmations: 0, bodyFills: [], topicSearches: [] };
+  const topicNode = name => ({ id: `topic-${name}`, name });
   const attrs = properties => Object.defineProperties({ offsetParent: {}, attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; },
     removeAttribute(name) { delete this.attributes[name]; },
     hasAttribute(name) { return Object.hasOwn(this.attributes, name); },
     getAttribute(name) { return this.attributes[name] ?? null; },
   }, Object.getOwnPropertyDescriptors(properties));
-  let persisted = { title: 'Original', body: 'Original caption',
+  let persisted = { title: 'Original', body: 'Original caption', topics: initialTopics.map(topicNode),
     video: 'https://example.invalid/original.mp4', cover: 'https://example.invalid/original-cover.jpg' };
   let composer = { ...persisted }, dialogOpen = false, thumbnails = [];
   const location = { href: '' };
   const title = attrs({ get value() { return composer.title; } });
   const paragraph = { cloneNode: () => ({ innerText: composer.body, querySelectorAll: () => [] }) };
-  const body = attrs({ querySelectorAll(selector) { return selector === ':scope > p' ? [paragraph] : []; } });
+  const body = attrs({
+    focus() {},
+    querySelectorAll(selector) {
+      if (selector === ':scope > p') return [paragraph];
+      if (selector === 'a.tiptap-topic') {
+        return composer.topics.map(topic => ({ getAttribute: () => JSON.stringify(topic) }));
+      }
+      return [];
+    },
+  });
+  let topicQuery = '';
+  const topicButton = { innerText: '话题', click() { topicQuery = ''; } };
+  const topicPicker = { querySelectorAll: () => [{
+    querySelector: () => ({ textContent: `#${topicQuery}` }),
+    click() { composer.topics = [...composer.topics, topicNode(topicQuery)]; },
+  }] };
   const video = { get currentSrc() { return composer.video; }, duration: null, querySelector: () => null };
   const preview = attrs({ get style() { return { backgroundImage: `url("${composer.cover}")` }; } });
   const videoInput = attrs({ accept: 'video/mp4', files: [] });
@@ -553,6 +571,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     if (throwAtSubmit === observed.submissions) throw new Error('Connection lost after submit invocation');
     if (observed.submissions === 1) {
       persisted = { ...composer,
+        topics: savedTopicsAfterVideo?.map(topicNode) ?? composer.topics,
         video: observed.videoUploads === 0 ? persisted.video
           : savedVideo === 'empty' ? '' : savedVideo === 'unchanged'
             ? persisted.video : 'https://example.invalid/revised.mp4',
@@ -567,7 +586,9 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
   const all = [title, body, preview, videoInput, coverInput, complete, dialog, host, coverEntry];
   const document = {
     body: { innerText: '' },
+    createRange: () => ({ selectNodeContents() {}, collapse() {} }),
     querySelectorAll(selector) {
+      if (selector === 'button') return [topicButton];
       if (selector.includes('placeholder')) return [title];
       if (selector.includes('tiptap')) return [body];
       if (selector === 'input[type="file"]') return [videoInput];
@@ -580,6 +601,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
       throw new Error(`Unexpected document list selector ${selector}`);
     },
     querySelector(selector) {
+      if (selector === '#creator-editor-topic-container') return topicPicker;
       if (selector === 'video') return video;
       if (selector === '.img-container') return null;
       if (selector.includes('tiptap')) return body;
@@ -596,13 +618,22 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
     evaluate: async source => evaluate(source, {
       document,
       location,
-      window: {},
+      window: { getSelection: () => ({ removeAllRanges() {}, addRange() {} }) },
       MouseEvent: class {
         constructor(type, options) { this.type = type; this.options = options; }
       },
     }),
-    fillText: async (selector, value) => { composer[selector.includes('placeholder') ? 'title' : 'body'] = value;
-      return { filled: true, verified: true, actual: value }; },
+    fillText: async (selector, value) => {
+      if (selector.includes('placeholder')) composer.title = value;
+      else {
+        observed.bodyFills.push(value);
+        composer.body = value;
+        composer.topics = [];
+      }
+      return { filled: true, verified: true, actual: value };
+    },
+    pressKey: async key => { assert.equal(key, 'Enter'); },
+    insertText: async text => { topicQuery = text; observed.topicSearches.push(text); },
     hover: async () => {},
     setFileInput: async (files, selector) => {
       const stat = await fs.stat(files[0]);
@@ -615,7 +646,7 @@ function stagedVideoEditor({ savedVideo = 'changed', savedCover = 'changed', thr
       }
     },
     wait: async options => {
-      if (options?.time === 1) return;
+      if ([1, 0.3, 0.8, 0.6].includes(options?.time)) return;
       throw new Error('Unexpected pending editor state');
     },
   };
@@ -632,6 +663,9 @@ async function stagedEditFixture(t, options = {}) {
     ...fixture,
     run: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
       { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', video, cover, ...extra }),
+    runCopyOnly: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
+      { 'note-id': '000000000000000000000001', title: 'Original', content: 'Original caption',
+        'prepare-only': true, ...extra }),
     runCoverOnly: extra => getRegistry().get('xiaohongshu/edit-note').func(fixture.page,
       { 'note-id': '000000000000000000000001', title: 'Revised', content: 'Revised caption', cover, ...extra }),
   };
@@ -650,6 +684,45 @@ test('video and cover save in two stages and verify the same reopened note', asy
   assert.equal(f.observed.videoUploads, 1); assert.equal(f.observed.coverUploads, 1);
   assert.equal(f.observed.coverConfirmations, 1); assert.equal(f.observed.opens.length, 3);
   assert.ok(f.observed.opens.every(url => url.includes('id=000000000000000000000001')));
+});
+
+test('changing topics rebuilds the body before native topic replacement', async t => {
+  const f = await stagedEditFixture(t, { initialTopics: ['Prior', 'Shared'] });
+  const [result] = await f.runCopyOnly({ topics: 'Shared,New' });
+  assert.equal(result.status, 'prepared');
+  assert.equal(result.body, 'Original caption');
+  assert.deepEqual(Array.from(result.topics, ({ id, name }) => [id, name]),
+    [['topic-Shared', 'Shared'], ['topic-New', 'New']]);
+  assert.deepEqual(f.observed.bodyFills, ['Original caption']);
+  assert.equal(f.observed.submissions, 0);
+});
+
+test('clearing all topics removes native nodes without invoking the picker', async t => {
+  const f = await stagedEditFixture(t, { initialTopics: ['Prior'] });
+  const [result] = await f.runCopyOnly({ topics: '' });
+  assert.equal(result.body, 'Original caption');
+  assert.equal(result.topics.length, 0);
+  assert.deepEqual(f.observed.topicSearches, []);
+  assert.equal(f.observed.submissions, 0);
+});
+
+test('changing only the body reattaches the requested native topics', async t => {
+  const f = await stagedEditFixture(t, { initialTopics: ['Shared'] });
+  const [result] = await f.runCopyOnly({ content: 'Revised caption', topics: 'Shared' });
+  assert.equal(result.body, 'Revised caption');
+  assert.equal(result.topics[0]?.id, 'topic-Shared');
+  assert.deepEqual(f.observed.topicSearches, ['Shared']);
+  assert.equal(f.observed.submissions, 0);
+});
+
+test('cover stage rebuilds the saved body when it reopens with different native topics', async t => {
+  const f = await stagedEditFixture(t, { initialTopics: ['Prior'], savedTopicsAfterVideo: ['Prior'] });
+  const [result] = await f.run({ title: 'Original', content: 'Original caption', topics: 'New' });
+  assert.equal(result.status, 'updated');
+  assert.equal(result.topicNodes[0]?.id, 'topic-New');
+  assert.deepEqual(f.observed.bodyFills, ['Original caption', 'Original caption']);
+  assert.deepEqual(f.observed.topicSearches, ['New', 'New']);
+  assert.equal(f.observed.submissions, 2);
 });
 
 test('custom cover timeout is configurable and invalid values fail before browser use', async t => {
