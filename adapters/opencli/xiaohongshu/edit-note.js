@@ -8,6 +8,16 @@ import { videoSourceChanged, videoSourceIdentity } from '../../../src/lib/media.
 import { validateNoteId, validateTitle, validateBody, validateTopics, validateImages, validateVideo, openEditor, readEditor, fillTitle, fillBody, replaceTopics, replaceImages, replaceVideo, normalizeForComparison, sameTopics, submitEdit, editUrl, waitFor } from './editor-helpers.mjs';
 import { withOwnedTabCleanup } from './owned-tab.mjs';
 
+async function updateBodyAndTopics(page, current, content, topics) {
+  if (normalizeForComparison(current.body) === normalizeForComparison(content)
+    && sameTopics(current.topics, topics)) return;
+
+  // Replacing the rich-text body clears its embedded topic nodes, so rebuild
+  // the body and add the full requested set together.
+  await fillBody(page, content);
+  await replaceTopics(page, topics);
+}
+
 cli({
   site: 'xiaohongshu',
   name: 'edit-note',
@@ -99,14 +109,7 @@ cli({
       };
     }
     if (before.title !== title) await fillTitle(page, title);
-    const topicsChanged = !sameTopics(before.topics, topics);
-    // Topic nodes live inside the rich-text body. Rebuild the frozen body
-    // before adding a different topic set; otherwise the picker can append new
-    // nodes while retaining old ones.
-    if (normalizeForComparison(before.body) !== normalizeForComparison(content) || topicsChanged) {
-      await fillBody(page, content);
-    }
-    if (topicsChanged) await replaceTopics(page, topics);
+    await updateBodyAndTopics(page, before, content, topics);
     await replaceImages(page, images);
     const declarations = await applyDeclarations(page, desiredDeclarations);
 
@@ -180,13 +183,7 @@ cli({
         preCoverSource,
       };
       if (videoSaved.title !== title) await fillTitle(page, title);
-      if (normalizeForComparison(videoSaved.body) !== normalizeForComparison(content)) {
-        await fillBody(page, content);
-      }
-      if (!sameTopics(videoSaved.topics, topics)) {
-        await fillBody(page, content);
-        await replaceTopics(page, topics);
-      }
+      await updateBodyAndTopics(page, videoSaved, content, topics);
       await applyDeclarations(page, desiredDeclarations);
       const coverPrepared = await readEditor(page);
       if (!coverPrepared || coverPrepared.title !== title
