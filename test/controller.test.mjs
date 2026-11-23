@@ -448,11 +448,13 @@ test('manual completion links the original task through readback without publish
   await fs.writeFile(f.env.FAKE_OPENCLI_STATE, JSON.stringify({ writes: 0, notes: [{ noteId,
     title: 'Manual example', body: 'A specific street-corner discovery.', topics: [{ id: 'topic-1', name: '城市漫步' }],
     imageCount: 1, mediaType: 'image', verification: { title: true, body: true, nativeTopics: true, imageCount: true } }] }));
-  const result = await command(['link-existing', id, '--note-id', noteId, '--reason', 'Owner manually completed the prepared post'], f.env);
+  const readLog = path.join(f.root, 'note-reads.log');
+  const result = await command(['link-existing', id, '--note-id', noteId, '--reason', 'Owner manually completed the prepared post'], { ...f.env, FAKE_READ_LOG: readLog });
   assert.equal(result.json.state, 'verified', JSON.stringify(result));
   assert.equal(result.json.publishedByThisCall, false);
   assert.equal(result.json.platformNoteId, noteId);
   assert.equal((await platform(f.env)).writes, 0);
+  assert.equal(await fs.readFile(readLog, 'utf8'), `${noteId}\n`);
   const readback = (await command(['show', id], f.env)).json;
   assert.ok(readback.events.some(event => event.event === 'manual_publication_claimed'));
 });

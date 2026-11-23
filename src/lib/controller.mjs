@@ -460,10 +460,10 @@ export class Controller {
     }
     return null;
   }
-  async completeReadback(task, noteId, publication = null, { reservation = null, coverEvidence = null } = {}) {
+  async completeReadback(task, noteId, publication = null, { reservation = null, coverEvidence = null, observedNote = null } = {}) {
     checkNoteId(noteId);
     const noteType = task.video || task.cover || task.baseline_note?.mediaType === 'video' ? 'video' : 'normal';
-    const row = rowOf(resultData(await readNote(noteId, task.browser_profile, noteType, { coverHash: Boolean(coverEvidence) }), 'Note readback'));
+    const row = observedNote ?? rowOf(resultData(await readNote(noteId, task.browser_profile, noteType, { coverHash: Boolean(coverEvidence) }), 'Note readback'));
     const coverContentEvidence = coverEvidence ? await verifyCoverEvidence(coverEvidence, { ...task, platform_note_id: noteId }, row) : null;
     const verification = compareReadback({ ...task, platform_note_id: noteId }, row, publication, coverContentEvidence);
     const state = verification.matched ? 'verified'
@@ -766,7 +766,7 @@ export class Controller {
       const current = db.prepare('SELECT state,phase FROM tasks WHERE id=?').get(id);
       if (current.state !== 'needs_review' || current.phase !== reservation) throw new Error('Manual linkage reservation changed; inspect the current task');
     });
-    const completed = await this.completeReadback(task, noteId, publication, { reservation, coverEvidence });
+    const completed = await this.completeReadback(task, noteId, publication, { reservation, coverEvidence, observedNote: row });
     if (completed.state === 'verified') resolveAccountWrite({ accountUserId: account.userId, browserProfile: account.profile,
       home: this.root, taskId: id, reason: 'Manually identified note matched by same-note platform readback' });
     return { ...completed, source: 'manual-link', publishedByThisCall: false };
