@@ -19,6 +19,7 @@ else if (command === 'steward-read-note') {
   if (process.env.FAKE_REQUIRE_VIDEO_READ === '1' && option('--note-type') !== 'video') {
     process.stderr.write('The synthetic video note requires the video editor\n'); process.exit(1);
   }
+  if (process.env.FAKE_READ_LOG) fs.appendFileSync(process.env.FAKE_READ_LOG, `${args[2]}\n`);
   if (process.env.FAKE_READ_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_READ_DELAY)));
   output(state.notes.filter(note => note.noteId === args[2]).map(note => {
     if (!args.includes('--cover-hash') || !process.env.FAKE_COVER_FILE) return note;
