@@ -8,9 +8,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('OPL Package v2 declares RedNote entrypoints and all workspace views', async () => {
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'opl-package.json'), 'utf8'));
+  const packageMetadata = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   assert.equal(manifest.schema_version, 'opl.package.v2');
+  assert.match(packageMetadata.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   assert.deepEqual(manifest.identity, {
-    id: 'rednote-steward', version: '0.2.11', intent: 'extension',
+    id: 'rednote-steward', version: packageMetadata.version, intent: 'extension',
     name: { 'zh-CN': 'RedNote Steward', 'en-US': 'RedNote Steward' },
     summary: {
       'zh-CN': '通过统一的本地 CLI 和 MCP 服务准备、审阅并管理小红书内容发布。',
