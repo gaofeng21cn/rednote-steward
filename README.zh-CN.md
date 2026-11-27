@@ -53,9 +53,9 @@ RedNote Steward 把准备好的素材、账号配置、发布任务和平台结�
 通过 OPL 软件中心或同一 CLI 管理正式 Package：
 
 ```bash
-opl packages install rednote-steward --json
-opl packages status --package-id rednote-steward --json
-opl packages update rednote-steward --json
+opl pack install ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward --json
+opl pack inspect rednote-steward --json
+opl pack update rednote-steward --json
 ```
 
 Package 发行源为 `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward`。

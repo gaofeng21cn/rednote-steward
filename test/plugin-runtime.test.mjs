@@ -17,6 +17,8 @@ test('plugin dependency preparation is isolated, serialized and leaves stdout to
   await fs.copyFile(path.join(project, 'scripts/run-plugin.mjs'), path.join(root, 'scripts/run-plugin.mjs'));
   const pkg = { name: 'rednote-steward', version: '0.2.3', dependencies: {} };
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify(pkg));
+  await fs.writeFile(path.join(root, 'opl-package.json'), JSON.stringify({ schema_version: 'opl.package.v2',
+    identity: { id: pkg.name, version: pkg.version } }));
   await fs.writeFile(path.join(root, 'package-lock.json'), JSON.stringify({ ...pkg, lockfileVersion: 3, packages: { '': pkg } }));
   await fs.writeFile(path.join(root, 'src/cli.mjs'), 'console.log(JSON.stringify({ok:true,args:process.argv.slice(2)}));\n');
   const run = () => exec(process.execPath, [path.join(root, 'scripts/run-plugin.mjs'), 'cli', 'status'], { timeout: 30_000 });

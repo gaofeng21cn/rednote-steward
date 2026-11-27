@@ -8,8 +8,9 @@ The application uses its packaged OpenCLI registry and adapters. It leaves an in
 
 The current managed Package uses the shared OCI source:
 `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward`.
-Run `opl packages install rednote-steward --json`, inspect the installed version,
-and use Software Center for updates and removal. Source tags bind immutable OCI
+Run `opl pack install ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward --json`,
+inspect the installed version with `opl pack inspect rednote-steward --json`,
+and use OPL Software Center (`opl pack update` / `uninstall`) for updates and removal. Source tags bind immutable OCI
 versions. Local checkouts are explicit developer overrides; the Software Center
 never downloads a Git branch as a released version.
 
@@ -145,26 +146,27 @@ release cannot remove a newer installation. Installer progress output is not a
 single JSON response; management callers verify the result with a fresh
 installation status read.
 
-## OPL and Codex plugin management
+## OPL Package management
 
 The stable Package ID is `rednote-steward`; the display name is **RedNote
-Steward**. Its description and localized presentation live in `opl-package.json`.
-The repository marketplace declares `rednote-steward@rednote-steward`. OPL uses
-the pinned source payload and Codex native plugin manager for installation,
-update, enable/disable and removal. Released Package identity is verified independently of
-account login and publishing capabilities.
+Steward**. Canonical metadata, dependencies, CLI/MCP declarations, and app
+contribution views live in root `opl-package.json` (`opl.package.v2`). OPL uses
+the immutable OCI payload and `opl pack` (`install`, `update`, `inspect`, `uninstall`)
+with optional host projections (`host_hints.codex`). Released Package identity is
+verified independently of account login and publishing capabilities.
 
-The plugin contains the runtime, MCP definition and package lock. Its shared
-launcher prepares dependencies with `npm ci --ignore-scripts` inside the plugin
-directory, sends setup messages to stderr, and starts the same CLI, MCP or App
-contribution entrypoint. Node.js 24+ and npm are required. No global npm package,
-native application selection, extra MCP registration or browser session is
-created by this dependency preparation.
+The installed Package payload contains the runtime, MCP entrypoint declaration,
+and `package-lock.json`. Its launcher prepares dependencies with
+`npm ci --ignore-scripts` inside the package runtime directory, sends setup messages
+to stderr, and starts the same CLI, MCP, or App contribution entrypoint.
+Node.js 24+ and npm are required. No global npm package, native application
+selection, extra MCP registration, or browser session is created by this
+dependency preparation.
 
-Removing the plugin removes that carrier; it leaves the native application and
+Uninstalling the OPL Package leaves the standalone native application and
 private account/task/media state with their existing owners. Use the same
-`XHS_OPS_HOME` when both carriers should operate the same queue. Installing a
-plugin does not grant publication authorization or create a second account owner.
+`XHS_OPS_HOME` when both entrypoints should operate the same queue. Installing
+the Package does not grant publication authorization or create a second account owner.
 
 ## Existing xhs-ops workspaces
 

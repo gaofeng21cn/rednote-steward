@@ -20,6 +20,8 @@ async function fixture(t) {
     await fs.mkdir(path.join(sourceRoot, name), { recursive: true });
   }
   await fs.writeFile(path.join(sourceRoot, 'package.json'), JSON.stringify({ name: 'rednote-steward', version: '0.1.0', type: 'module' }));
+  await fs.writeFile(path.join(sourceRoot, 'opl-package.json'), JSON.stringify({ schema_version: 'opl.package.v2',
+    identity: { id: 'rednote-steward', version: '0.1.0' } }));
   await fs.writeFile(path.join(sourceRoot, 'node_modules/@jackwener/opencli/package.json'), '{}');
   await fs.writeFile(path.join(sourceRoot, 'src/opencli-runner.mjs'), '');
   await fs.writeFile(path.join(sourceRoot, 'src/mcp.mjs'), '');
@@ -110,6 +112,8 @@ test('a failed upgrade restores the previous application and commands', async (t
   const broken = path.join(p.base, 'broken source');
   await fs.mkdir(path.join(broken, 'src'), { recursive: true });
   await fs.writeFile(path.join(broken, 'package.json'), JSON.stringify({ name: 'rednote-steward', version: '0.1.1', type: 'module' }));
+  await fs.writeFile(path.join(broken, 'opl-package.json'), JSON.stringify({ schema_version: 'opl.package.v2',
+    identity: { id: 'rednote-steward', version: '0.1.1' } }));
   await fs.writeFile(path.join(broken, 'src/cli.mjs'), `throw new Error('broken setup');\n`);
   await assert.rejects(exec(process.execPath, [path.join(project, 'scripts/install-local.mjs'), '--source', broken, ...installerArgs], { env }), /previous commands and application selection were restored/);
   assert.equal(await fs.readlink(path.join(p.installRoot, 'current')), previous);

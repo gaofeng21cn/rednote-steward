@@ -38,12 +38,15 @@ export async function installationStatus({ installRoot = process.env.XHS_OPS_INS
       || typeof receipt.current !== 'string' || await fs.realpath(receipt.current) !== selected) {
       return { ...result, reason: 'installation_selection_mismatch' };
     }
-    const [pkg, location, manifest] = await Promise.all([
+    const [pkg, packageManifest, location, manifest] = await Promise.all([
       readJson(path.join(selected, 'package.json')),
+      readJson(path.join(selected, 'opl-package.json')),
       readJson(path.join(selected, '.install-location.json')),
       readJson(path.join(selected, 'release-manifest.json')),
     ]);
     if (pkg?.name !== identity.package_id || pkg.version !== receipt.version
+      || packageManifest?.schema_version !== 'opl.package.v2'
+      || packageManifest.identity?.id !== pkg.name || packageManifest.identity?.version !== pkg.version
       || location?.product !== identity.package_id || path.resolve(location.root || '') !== root
       || receipt.uninstalledAt) return { ...result, reason: 'installation_identity_mismatch' };
     const content = await publicContentDigest(selected);
@@ -51,7 +54,8 @@ export async function installationStatus({ installRoot = process.env.XHS_OPS_INS
       source_revision: typeof receipt.sourceRevision === 'string' ? receipt.sourceRevision : null,
       content_digest: content.digest,
       revision: hash(JSON.stringify([receipt, selected, content.digest])) };
-    if (content.digest !== receipt.contentDigest || manifest && (manifest.product !== identity.package_id
+    if (content.digest !== receipt.contentDigest || manifest && (manifest.packageFormat !== 'opl.package.v2'
+      || manifest.product !== identity.package_id
       || manifest.version !== pkg.version || manifest.content?.digest !== content.digest
       || manifest.sourceRevision !== receipt.sourceRevision)) {
       return { ...observed, reason: 'installation_content_changed' };

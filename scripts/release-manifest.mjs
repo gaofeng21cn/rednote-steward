@@ -21,5 +21,5 @@ if (args.includes('--check')) {
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.writeFile(target, `${JSON.stringify(manifest, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ ok: true, path: target, version: manifest.version, sourceRevision: manifest.sourceRevision,
-    sourceDirty: manifest.sourceDirty, digest: manifest.content.digest })}\n`);
+    sourceDirty: manifest.sourceDirty, packageFormat: manifest.packageFormat, digest: manifest.content.digest })}\n`);
 }

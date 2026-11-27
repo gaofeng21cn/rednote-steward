@@ -22,6 +22,8 @@ async function install(p, version) {
   await fs.mkdir(path.join(source, 'src'), { recursive: true });
   await fs.mkdir(path.join(source, 'scripts'), { recursive: true });
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'rednote-steward', version, type: 'module' }));
+  await fs.writeFile(path.join(source, 'opl-package.json'), JSON.stringify({ schema_version: 'opl.package.v2',
+    identity: { id: 'rednote-steward', version } }));
   await fs.writeFile(path.join(source, 'src/cli.mjs'), 'console.log(JSON.stringify({ok:true}));\n');
   await fs.writeFile(path.join(source, 'src/mcp.mjs'), '');
   await fs.writeFile(path.join(source, 'src/setup.mjs'), 'export async function setup(){ return { dataPreserved: true }; }\n');

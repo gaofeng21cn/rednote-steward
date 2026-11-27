@@ -53,9 +53,9 @@ The runner selects eligible accounts, so one unresolved task does not hold up an
 Install the released Package from OPL Software Center or its CLI:
 
 ```bash
-opl packages install rednote-steward --json
-opl packages status --package-id rednote-steward --json
-opl packages update rednote-steward --json
+opl pack install ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward --json
+opl pack inspect rednote-steward --json
+opl pack update rednote-steward --json
 ```
 
 The Package source is `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward`.

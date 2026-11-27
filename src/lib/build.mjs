@@ -14,7 +14,7 @@ export const BRIDGE_RELEASE = {
 };
 const PUBLIC_INPUTS = ['package.json', 'package-lock.json', 'src', 'adapters', 'skills', 'scripts',
   'install.sh', 'LICENSE', 'NOTICE', 'README.md', 'README.zh-CN.md', 'docs', 'assets', 'examples',
-  'opl-package.json', 'app-contribution-adapter.json', 'plugin.json', '.codex-plugin', 'mcp.json', '.agents/plugins'];
+  'opl-package.json', 'release-automation.json'];
 
 export async function readJson(file, fallback = null) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
@@ -55,12 +55,17 @@ async function gitSource(root) {
 
 export async function buildIdentity(root = PACKAGE_ROOT) {
   const pkg = await readJson(path.join(root, 'package.json'), {});
+  const packageManifest = await readJson(path.join(root, 'opl-package.json'));
   const manifest = await readJson(path.join(root, 'release-manifest.json'));
   const content = await publicContentDigest(root);
   const git = await gitSource(root);
+  const packageManifestMatches = Boolean(packageManifest?.schema_version === 'opl.package.v2'
+    && packageManifest.identity?.id === pkg.name && packageManifest.identity?.version === pkg.version);
   const manifestMatches = Boolean(manifest && manifest.schemaVersion === 1 && manifest.product === 'rednote-steward' &&
-    manifest.version === pkg.version && manifest.content?.digest === content.digest);
+    manifest.packageFormat === 'opl.package.v2' && manifest.version === pkg.version
+    && manifest.content?.digest === content.digest && packageManifestMatches);
   return { product: pkg.name || 'rednote-steward', version: pkg.version || null,
+    packageManifest: { schemaVersion: packageManifest?.schema_version ?? null, matched: packageManifestMatches },
     sourceRevision: git.sourceRevision || (manifestMatches ? manifest.sourceRevision : null),
     sourceDirty: git.sourceRevision ? git.sourceDirty : manifestMatches ? manifest.sourceDirty : null,
     content, manifest: manifest ? { present: true, matched: manifestMatches,
@@ -73,7 +78,8 @@ export async function buildIdentity(root = PACKAGE_ROOT) {
 
 export async function createReleaseManifest(root = PACKAGE_ROOT, { qualification = [] } = {}) {
   const identity = await buildIdentity(root);
-  return { schemaVersion: 1, product: 'rednote-steward', version: identity.version,
+  if (!identity.packageManifest.matched) throw new Error('The source must contain a matching opl.package.v2 manifest.');
+  return { schemaVersion: 1, packageFormat: 'opl.package.v2', product: 'rednote-steward', version: identity.version,
     sourceRevision: identity.sourceRevision, sourceDirty: identity.sourceDirty,
     generatedAt: new Date().toISOString(), content: identity.content,
     dependencies: identity.dependencies, browserBridge: BRIDGE_RELEASE, qualification };

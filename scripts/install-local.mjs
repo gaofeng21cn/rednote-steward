@@ -27,11 +27,17 @@ if (root === path.parse(root).root || root === source || bin === root) throw new
 
 const pkg = JSON.parse(await fs.readFile(path.join(source, 'package.json'), 'utf8'));
 if (pkg.name !== 'rednote-steward') throw new Error('Source package is not RedNote Steward.');
+const packageManifest = JSON.parse(await fs.readFile(path.join(source, 'opl-package.json'), 'utf8'));
+if (packageManifest.schema_version !== 'opl.package.v2' || packageManifest.identity?.id !== pkg.name
+  || packageManifest.identity?.version !== pkg.version) {
+  throw new Error('OPL Package v2 identity does not match package.json.');
+}
 const manifest = await fs.readFile(path.join(source, 'release-manifest.json'), 'utf8').then(value => JSON.parse(value)).catch(error => {
   if (error.code === 'ENOENT') return null;
   throw error;
 });
-if (manifest && (manifest.schemaVersion !== 1 || manifest.product !== 'rednote-steward' || manifest.version !== pkg.version)) {
+if (manifest && (manifest.schemaVersion !== 1 || manifest.packageFormat !== 'opl.package.v2'
+  || manifest.product !== 'rednote-steward' || manifest.version !== pkg.version)) {
   throw new Error('Release manifest identity does not match this package.');
 }
 const sourceRevision = manifest?.sourceRevision || null;

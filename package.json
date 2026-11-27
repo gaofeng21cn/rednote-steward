@@ -33,19 +33,13 @@
     "LICENSE",
     "NOTICE",
     "opl-package.json",
-    "app-contribution-adapter.json",
-    "plugin.json",
-    ".codex-plugin/",
     "release-manifest.json",
-    "mcp.json",
-    ".agents/plugins/",
     "release-automation.json"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "check:package": "node scripts/check-package.mjs",
     "mcp": "node src/mcp.mjs",
-    "lock:package": "node scripts/package-lock.mjs --write",
     "manifest": "node scripts/release-manifest.mjs",
     "check:manifest": "node scripts/release-manifest.mjs --check"
   },
