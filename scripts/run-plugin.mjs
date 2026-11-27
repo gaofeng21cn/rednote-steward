@@ -31,6 +31,9 @@ async function ready(pkg, digest) {
 async function prepare() {
   const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   if (pkg.name !== 'rednote-steward') throw new Error('Plugin runtime identity is invalid.');
+  const manifest = JSON.parse(await fs.readFile(path.join(root, 'opl-package.json'), 'utf8'));
+  if (manifest.schema_version !== 'opl.package.v2' || manifest.identity?.id !== pkg.name
+    || manifest.identity?.version !== pkg.version) throw new Error('Plugin OPL Package v2 identity is invalid.');
   const digest = createHash('sha256').update(await fs.readFile(path.join(root, 'package-lock.json'))).digest('hex');
   if (await ready(pkg, digest)) return;
   const lock = path.join(root, '.rednote-runtime-lock');

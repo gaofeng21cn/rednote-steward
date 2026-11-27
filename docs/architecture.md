@@ -77,4 +77,10 @@ The repository tests package validation, stable fingerprints, account binding, c
 
 A human can inspect the content and ask the Agent to continue under the existing publication authorization. `approve` / `task_authorize` accept the reviewed `fingerprint` and `revision` so a changed task cannot silently inherit a stale handoff. Execution still rechecks the frozen package and account in the existing Controller. The shared views expose no publishing actions. Reopening unresolved attempts only observes the original task; the existing `reconcile` command resolves its outcome before a retry.
 
-The `opl-package.json` contribution is development-only, with no publication reference. Native plugin metadata and the npm package include the same descriptor, adapter and owner source; this is source packaging, not an installed-host or live-account acceptance claim. Node 24 or newer is required. `npm run lock:package` updates the standard Package content lock after source edits, and `npm run check:package` verifies the lock and packaged files.
+`opl-package.json` (`opl.package.v2`) declares the Package identity, runtime
+dependencies, `rednote-steward` Skill, `rednote-steward-mcp` server, and
+declarative app contribution views; this is source packaging, not an
+installed-host or live-account acceptance claim. Node 24 or newer is required.
+`npm run check:package` verifies the package manifest, declared entrypoints, and
+packaged files (`opl pack build --no-write-lock` generates the v2 release lock at
+publish time).

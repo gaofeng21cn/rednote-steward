@@ -17,6 +17,8 @@ async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rednote-health-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'rednote-steward', version: '0.2.0', dependencies: { '@jackwener/opencli': '1.8.5' } }));
+  await fs.writeFile(path.join(root, 'opl-package.json'), JSON.stringify({ schema_version: 'opl.package.v2',
+    identity: { id: 'rednote-steward', version: '0.2.0' } }));
   await fs.mkdir(path.join(root, 'src'), { recursive: true });
   await fs.writeFile(path.join(root, 'src/cli.mjs'), 'export const example = true;\n');
   return root;

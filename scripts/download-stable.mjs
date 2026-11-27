@@ -11,6 +11,38 @@ const repository = 'gaofeng21cn/one-person-lab-packages/rednote-steward';
 const sourceRepository = 'https://github.com/gaofeng21cn/rednote-steward';
 const digest = bytes => 'sha256:' + createHash('sha256').update(bytes).digest('hex');
 
+async function verifyV2ReleaseLock(source, pkg, payload) {
+  const lock = JSON.parse(await fs.readFile(path.join(source, 'opl-release.lock.json'), 'utf8'));
+  const expected = payload.content_lock;
+  if (lock.schema_version !== 'opl.release.lock.v2' || lock.package_id !== pkg.name || lock.version !== pkg.version
+    || lock.algorithm !== 'sha256' || lock.canonicalization !== 'ordered_path_length_file_length_bytes'
+    || lock.file_count !== lock.paths?.length || payload.file_count !== lock.file_count || expected?.algorithm !== lock.algorithm
+    || expected?.canonicalization !== lock.canonicalization || expected?.digest !== lock.digest
+    || !/^sha256:[a-f0-9]{64}$/.test(lock.digest ?? '')) throw new Error('Stable Package v2 content lock identity differs');
+
+  const paths = [...lock.paths].sort();
+  if (new Set(paths).size !== paths.length || paths.some((relative, index) => relative !== lock.paths[index]
+    || path.posix.isAbsolute(relative) || relative.split('/').some(part => !part || part === '.' || part === '..')
+    || relative.includes('\\'))) throw new Error('Stable Package v2 content lock paths are invalid');
+
+  const hash = createHash('sha256');
+  for (const relative of paths) {
+    const absolute = path.resolve(source, relative);
+    if (!absolute.startsWith(`${path.resolve(source)}${path.sep}`)) throw new Error('Stable Package v2 content path escapes its root');
+    const stat = await fs.lstat(absolute);
+    if (!stat.isFile()) throw new Error(`Stable Package v2 content path is not a regular file: ${relative}`);
+    const name = Buffer.from(relative, 'utf8');
+    const bytes = await fs.readFile(absolute);
+    for (const value of [name, bytes]) {
+      const length = Buffer.alloc(8);
+      length.writeBigUInt64BE(BigInt(value.length));
+      hash.update(length);
+      hash.update(value);
+    }
+  }
+  if (`sha256:${hash.digest('hex')}` !== lock.digest) throw new Error('Stable Package v2 content digest differs');
+}
+
 export async function downloadStable({ destination, version = 'latest-stable', fetcher = fetch }) {
   if (!path.isAbsolute(destination)) throw new Error('Use an absolute, new staging directory');
   const tag = version.replace(/^v(?=\d)/, '');
@@ -39,16 +71,22 @@ export async function downloadStable({ destination, version = 'latest-stable', f
     if (bytes.length !== item.size || digest(bytes) !== item.digest) throw new Error('Stable Package layer digest differs');
     return bytes;
   };
-  const [packageBytes, payloadBytes, archive] = await Promise.all([
-    blob(layer('manifest.v1+json')), blob(layer('payload.v1+json')), blob(layer('source.v1+gzip')),
+  const [packageBytes, payloadBytes] = await Promise.all([
+    blob(layer('manifest.v1+json')), blob(layer('payload.v1+json')),
   ]);
   const descriptor = JSON.parse(packageBytes), payload = JSON.parse(payloadBytes);
+  if (payload.package_format !== undefined && payload.package_format !== 'v2') throw new Error('Unsupported stable Package format');
+  const packageFormat = payload.package_format === 'v2' ? 'v2' : 'v1';
+  const sourceLayer = packageFormat === 'v2' ? 'source.v2+gzip' : 'source.v1+gzip';
+  const archive = await blob(layer(sourceLayer));
   if (descriptor.package_id !== 'rednote-steward' || payload.package_id !== descriptor.package_id
     || payload.package_version !== descriptor.version || !/^\d+\.\d+\.\d+$/.test(descriptor.version)
     || (tag !== 'latest-stable' && descriptor.version !== tag)
     || !/^[a-f0-9]{40}$/.test(payload.source_commit)
     || descriptor.codex_surface?.carrier_source_commit !== payload.source_commit
-    || payload.source_repo?.replace(/\.git$/, '') !== sourceRepository) throw new Error('Stable Package release identity differs');
+    || payload.source_repo?.replace(/\.git$/, '') !== sourceRepository
+    || packageFormat === 'v2' && (!/^sha256:[a-f0-9]{64}$/.test(payload.archive_sha256 ?? '')
+      || digest(archive) !== payload.archive_sha256)) throw new Error('Stable Package release identity differs');
   await fs.mkdir(destination); // Existing application and private state are never extraction targets.
   const archivePath = path.join(destination, 'source.tar.gz');
   await fs.writeFile(archivePath, archive);
@@ -59,19 +97,30 @@ export async function downloadStable({ destination, version = 'latest-stable', f
     if (path.posix.isAbsolute(name) || parts.includes('..') || name.includes('\\')) throw new Error('Unsafe Package archive path');
     prefixes.add(parts[0]);
   }
-  if (prefixes.size !== 1 || ![...prefixes][0]) throw new Error('Stable source archive must have one root');
+  if (!listing.length || packageFormat === 'v1' && (prefixes.size !== 1 || ![...prefixes][0])) {
+    throw new Error('Stable source archive must have one root');
+  }
   const verbose = (await exec('tar', ['-tvzf', archivePath], { maxBuffer: 16 * 1024 * 1024 })).stdout.trim().split('\n');
   if (verbose.some(line => !['-', 'd'].includes(line[0]))) throw new Error('Stable source archive must contain regular files and directories');
   const source = path.join(destination, 'source');
   await fs.mkdir(source);
-  await exec('tar', ['-xzf', archivePath, '--strip-components=1', '-C', source]);
+  await exec('tar', ['-xzf', archivePath, ...(packageFormat === 'v1' ? ['--strip-components=1'] : []), '-C', source]);
   const pkg = JSON.parse(await fs.readFile(path.join(source, 'package.json')));
-  if (pkg.name !== 'rednote-steward' || pkg.version !== descriptor.version) throw new Error('Standalone and OCI versions differ');
-  for (const entry of payload.files) {
-    const relative = entry.path;
-    if (path.posix.isAbsolute(relative) || relative.split('/').includes('..') || relative.includes('\\')) throw new Error('Unsafe payload path');
-    const bytes = await fs.readFile(path.join(source, payload.source_root ?? '.', relative));
-    if (digest(bytes) !== entry.sha256) throw new Error(`Stable payload bytes differ: ${relative}`);
+  const packageManifest = JSON.parse(await fs.readFile(path.join(source, 'opl-package.json')));
+  if (pkg.name !== 'rednote-steward' || pkg.version !== descriptor.version
+    || packageFormat === 'v2' && (packageManifest.schema_version !== 'opl.package.v2'
+      || packageManifest.identity?.id !== pkg.name || packageManifest.identity?.version !== pkg.version)) {
+    throw new Error('Standalone and OCI Package identities differ');
+  }
+  if (packageFormat === 'v2') {
+    await verifyV2ReleaseLock(source, pkg, payload);
+  } else {
+    for (const entry of payload.files) {
+      const relative = entry.path;
+      if (path.posix.isAbsolute(relative) || relative.split('/').includes('..') || relative.includes('\\')) throw new Error('Unsafe payload path');
+      const bytes = await fs.readFile(path.join(source, payload.source_root ?? '.', relative));
+      if (digest(bytes) !== entry.sha256) throw new Error(`Stable payload bytes differ: ${relative}`);
+    }
   }
   const { createReleaseManifest } = await import(pathToFileURL(path.join(source, 'src/lib/build.mjs')).href);
   const installation = await createReleaseManifest(source);

@@ -1,276 +1,162 @@
 {
-  "surface_kind": "opl_capability_package_manifest.v2",
-  "package_id": "rednote-steward",
-  "display_name": "RedNote Steward",
-  "publisher": "gaofeng21cn",
-  "version": "0.2.11",
-  "source": "first_party_repo_local",
-  "source_repo": "https://github.com/gaofeng21cn/rednote-steward.git",
-  "package_role": "capability_package",
-  "publication_channel_admission": "admitted",
-  "capability_abi": {
-    "id": "rednote.steward.capabilities",
-    "version": "1.0.0",
-    "compatibility_policy": "same_major"
+  "schema_version": "opl.package.v2",
+  "identity": {
+    "id": "rednote-steward",
+    "version": "0.2.11",
+    "intent": "extension",
+    "name": {
+      "zh-CN": "RedNote Steward",
+      "en-US": "RedNote Steward"
+    },
+    "summary": {
+      "zh-CN": "通过统一的本地 CLI 和 MCP 服务准备、审阅并管理小红书内容发布。",
+      "en-US": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service."
+    },
+    "routing_summary": {
+      "zh-CN": "检查发布队列、审阅准确内容、维护已有笔记，并从同一任务恢复执行。",
+      "en-US": "Inspect the publication queue, review exact content, maintain existing posts and resume the same task."
+    },
+    "publisher": "gaofeng21cn",
+    "license": "Apache-2.0",
+    "icon": "assets/branding/rednote-steward-logo-v2.png",
+    "repository": "https://github.com/gaofeng21cn/rednote-steward"
   },
-  "exports": {
-    "core_skill_ids": [
-      "rednote-steward"
-    ],
-    "core_module_ids": [
+  "dependencies": {
+    "opl_base": "^2.0.0",
+    "runtimes": [
+      {
+        "name": "node",
+        "version": ">=24"
+      }
+    ]
+  },
+  "provides": {
+    "module_ids": [
       "rednote.steward.v1"
     ],
-    "optional_skill_policy_ref": "skills/rednote-steward/SKILL.md",
-    "optional_skills_installed_by_default": false,
-    "default_materialization_policy": "core_skills_only"
-  },
-  "entrypoints": [
-    {
-      "entrypoint_id": "rednote.steward.cli",
+    "cli_bin": [
+      {
+        "name": "xhs-ops",
+        "path": "./src/cli.mjs"
+      },
+      {
+        "name": "rednote-steward-mcp",
+        "path": "./src/mcp.mjs"
+      }
+    ],
+    "skills": [
+      {
+        "id": "rednote-steward",
+        "path": "./skills/rednote-steward",
+        "exposure": "default"
+      }
+    ],
+    "mcp_servers": [
+      {
+        "id": "rednote-steward",
+        "transport": "stdio",
+        "command": "node",
+        "args": [
+          "./scripts/run-plugin.mjs",
+          "mcp"
+        ]
+      }
+    ],
+    "contribution_handler": {
       "kind": "cli",
-      "argv": [
-        "node",
-        "./scripts/run-plugin.mjs",
-        "cli"
-      ]
-    },
-    {
-      "entrypoint_id": "rednote.steward.mcp",
-      "kind": "mcp",
-      "manifest_ref": "mcp.json"
-    }
-  ],
-  "codex_surface": {
-    "plugin_id": "rednote-steward",
-    "plugin_source_path": ".",
-    "codex_default_exposure": false,
-    "optional_install_policy": "core_skills_only",
-    "app_contribution_abi": {
-      "schema_version": "opl-package-app-contribution-cli.v1",
-      "transport": "stdin_json_stdout_json",
       "argv": [
         "node",
         "./scripts/run-plugin.mjs",
         "app-contribution"
       ],
-      "request_schema": "opl-package-app-contribution-request.v1",
-      "response_schema": "opl-package-app-contribution-response.v1"
-    },
-    "app_contribution_adapter": {
-      "manifest": "app-contribution-adapter.json"
-    },
-    "configured_codex_plugin_carrier": {
-      "kind": "codex_plugin_manager",
-      "plugin_selector": "rednote-steward@rednote-steward",
-      "executor_route": "codex_cli",
-      "marketplace_source": "gaofeng21cn/rednote-steward",
-      "publication_ref": "ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward:latest-stable"
+      "transport": "stdin_json_stdout_json"
     }
   },
-  "app_contributions": {
-    "schema_version": "opl-app-contributions.v1",
-    "views": [
-      {
-        "view_id": "rednote.steward.tasks",
-        "view_type": "list_detail",
-        "title_i18n": {
-          "en-US": "Publication tasks",
-          "zh-CN": "发布任务"
+  "ui": {
+    "declarative": {
+      "views": [
+        {
+          "id": "rednote.steward.tasks",
+          "view_type": "list_detail",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Publication tasks",
+            "zh-CN": "发布任务"
+          },
+          "data_ref": "rednote.steward.v1#tasks",
+          "sort_order": 800
         },
-        "data_ref": "rednote.steward.v1#tasks",
-        "command_ids": []
-      },
-      {
-        "view_id": "rednote.steward.review",
-        "view_type": "approval_diff",
-        "title_i18n": {
-          "en-US": "Exact content review",
-          "zh-CN": "精确内容审阅"
+        {
+          "id": "rednote.steward.review",
+          "view_type": "approval_diff",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Exact content review",
+            "zh-CN": "精确内容审阅"
+          },
+          "data_ref": "rednote.steward.v1#review",
+          "sort_order": 801
         },
-        "data_ref": "rednote.steward.v1#review",
-        "command_ids": []
-      },
-      {
-        "view_id": "rednote.steward.media",
-        "view_type": "artifact_view",
-        "title_i18n": {
-          "en-US": "Frozen task media",
-          "zh-CN": "任务素材"
+        {
+          "id": "rednote.steward.media",
+          "view_type": "list_detail",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Frozen task media",
+            "zh-CN": "任务素材"
+          },
+          "data_ref": "rednote.steward.v1#media",
+          "sort_order": 802
         },
-        "data_ref": "rednote.steward.v1#media",
-        "command_ids": []
-      },
-      {
-        "view_id": "rednote.steward.catalog",
-        "view_type": "list_detail",
-        "title_i18n": {
-          "en-US": "Account assets",
-          "zh-CN": "账号资产"
+        {
+          "id": "rednote.steward.catalog",
+          "view_type": "list_detail",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Account assets",
+            "zh-CN": "账号资产"
+          },
+          "data_ref": "rednote.steward.v1#catalog",
+          "sort_order": 803
         },
-        "data_ref": "rednote.steward.v1#catalog",
-        "command_ids": []
-      },
-      {
-        "view_id": "rednote.steward.history",
-        "view_type": "list_detail",
-        "title_i18n": {
-          "en-US": "Metric history",
-          "zh-CN": "指标历史"
+        {
+          "id": "rednote.steward.history",
+          "view_type": "activity_log",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Metric history",
+            "zh-CN": "指标历史"
+          },
+          "data_ref": "rednote.steward.v1#history",
+          "sort_order": 804
         },
-        "data_ref": "rednote.steward.v1#history",
-        "command_ids": []
-      },
-      {
-        "view_id": "rednote.steward.recovery",
-        "view_type": "list_detail",
-        "title_i18n": {
-          "en-US": "Recovery queue",
-          "zh-CN": "恢复队列"
-        },
-        "data_ref": "rednote.steward.v1#recovery",
-        "command_ids": []
-      }
-    ],
-    "commands": [],
-    "badges": [],
-    "ui": [
-      {
-        "contribution_id": "rednote.steward.tasks",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 800,
-        "view_id": "rednote.steward.tasks"
-      },
-      {
-        "contribution_id": "rednote.steward.review",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 801,
-        "view_id": "rednote.steward.review"
-      },
-      {
-        "contribution_id": "rednote.steward.media",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 802,
-        "view_id": "rednote.steward.media"
-      },
-      {
-        "contribution_id": "rednote.steward.catalog",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 803,
-        "view_id": "rednote.steward.catalog"
-      },
-      {
-        "contribution_id": "rednote.steward.history",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 804,
-        "view_id": "rednote.steward.history"
-      },
-      {
-        "contribution_id": "rednote.steward.recovery",
-        "slot": "settings.section",
-        "contribution_kind": "view",
-        "trust_tier": "declarative",
-        "scope": "root",
-        "sort_order": 805,
-        "view_id": "rednote.steward.recovery"
-      }
-    ]
+        {
+          "id": "rednote.steward.recovery",
+          "view_type": "list_detail",
+          "slot": "settings.section",
+          "settings_destination": "workspace",
+          "title": {
+            "en-US": "Recovery queue",
+            "zh-CN": "恢复队列"
+          },
+          "data_ref": "rednote.steward.v1#recovery",
+          "sort_order": 805
+        }
+      ]
+    }
   },
-  "content_lock": {
-    "algorithm": "sha256",
-    "canonicalization": "ordered_path_length_file_length_bytes",
-    "paths": [
-      ".agents/plugins/marketplace.json",
-      ".codex-plugin/plugin.json",
-      "adapters/opencli/xiaohongshu/cover-editor.mjs",
-      "adapters/opencli/xiaohongshu/declarations.mjs",
-      "adapters/opencli/xiaohongshu/edit-note.js",
-      "adapters/opencli/xiaohongshu/editor-helpers.mjs",
-      "adapters/opencli/xiaohongshu/inventory.js",
-      "adapters/opencli/xiaohongshu/owned-tab.mjs",
-      "adapters/opencli/xiaohongshu/page-check.mjs",
-      "adapters/opencli/xiaohongshu/steward-account.js",
-      "adapters/opencli/xiaohongshu/steward-publish.js",
-      "adapters/opencli/xiaohongshu/steward-read-note.js",
-      "adapters/opencli/xiaohongshu/topic-probe.js",
-      "app-contribution-adapter.json",
-      "assets/branding/rednote-steward-logo-v2.png",
-      "install.sh",
-      "mcp.json",
-      "package-lock.json",
-      "package.json",
-      "plugin.json",
-      "release-automation.json",
-      "scripts/check-package.mjs",
-      "scripts/download-stable.mjs",
-      "scripts/install-local.mjs",
-      "scripts/lib/npm-pack-output.mjs",
-      "scripts/package-lock.mjs",
-      "scripts/release-manifest.mjs",
-      "scripts/run-plugin.mjs",
-      "scripts/uninstall.mjs",
-      "scripts/uninstall.sh",
-      "skills/rednote-steward/SKILL.md",
-      "src/app-contribution.mjs",
-      "src/cli.mjs",
-      "src/lib/audit.mjs",
-      "src/lib/backup.mjs",
-      "src/lib/build.mjs",
-      "src/lib/catalog.mjs",
-      "src/lib/config.mjs",
-      "src/lib/controller.mjs",
-      "src/lib/cover-evidence.mjs",
-      "src/lib/db.mjs",
-      "src/lib/health.mjs",
-      "src/lib/installation.mjs",
-      "src/lib/lineage.mjs",
-      "src/lib/media.mjs",
-      "src/lib/migration.mjs",
-      "src/lib/opencli.mjs",
-      "src/lib/owner.mjs",
-      "src/lib/package.mjs",
-      "src/lib/progress.mjs",
-      "src/lib/qualification.mjs",
-      "src/lib/review.mjs",
-      "src/lib/video-compare.mjs",
-      "src/lib/workspace.mjs",
-      "src/mcp.mjs",
-      "src/opencli-runner.mjs",
-      "src/setup.mjs"
-    ],
-    "digest": "sha256:91b133cce7cf50cdec196ff3177198413f068b68895890001bd18595671dea8b"
+  "distribution": {
+    "oci": "ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward",
+    "visibility": "public"
   },
-  "description": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service.",
-  "presentation": {
-    "display_name_i18n": {
-      "zh-CN": "RedNote Steward",
-      "en-US": "RedNote Steward"
-    },
-    "description_i18n": {
-      "zh-CN": "管理小红书图文与视频发布、账号内容资产和中断任务恢复。",
-      "en-US": "Prepare, review and manage Xiaohongshu publications through one local CLI and MCP service."
-    },
-    "session_routing_summary_i18n": {
-      "zh-CN": "检查发布队列、审阅准确内容、维护已有笔记，并从同一任务恢复执行。",
-      "en-US": "Inspect the publication queue, review exact content, maintain existing posts and resume the same task."
-    },
-    "home_shortcuts": [],
-    "software_type": "application",
-    "icon_ref": "assets/branding/rednote-steward-logo-v2.png"
-  },
-  "management_scope": "local_product"
+  "host_hints": {
+    "codex": {
+      "sync_enabled": false
+    }
+  }
 }
