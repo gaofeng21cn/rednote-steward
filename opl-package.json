@@ -2,7 +2,7 @@
   "schema_version": "opl.package.v2",
   "identity": {
     "id": "rednote-steward",
-    "version": "0.2.11",
+    "version": "0.2.12",
     "intent": "extension",
     "name": {
       "zh-CN": "RedNote Steward",
