@@ -4,7 +4,7 @@ RedNote Steward runs locally on macOS with Node.js 24+ and Google Chrome. Its pa
 
 The application uses its packaged OpenCLI registry and adapters. It leaves an independently installed OpenCLI and `~/.opencli` commands in place. CLI, daemon and extension versions are separate; doctor shows the observed combination so a newer global CLI is not mistaken for the bundled runtime. A dependency upgrade is qualified per operation before it replaces the pinned combination.
 
-## OPL Software Center
+## OPL Software Center (Recommended)
 
 The current managed Package uses the shared OCI source:
 `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-steward`.
@@ -14,7 +14,7 @@ and use OPL Software Center (`opl pack update` / `uninstall`) for updates and re
 versions. Local checkouts are explicit developer overrides; the Software Center
 never downloads a Git branch as a released version.
 
-## macOS installation and updates
+## Standalone macOS fallback (without OPL)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/rednote-steward/main/install.sh | bash

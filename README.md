@@ -48,7 +48,7 @@ Account preferences and operational records live outside the installed code. Med
 
 The runner selects eligible accounts, so one unresolved task does not hold up an unrelated account. An account ID or Chrome profile has one local state owner, including when more than one `XHS_OPS_HOME` exists on the machine.
 
-## Install with OPL Software Center
+## Install with OPL Software Center (Recommended)
 
 Install the released Package from OPL Software Center or its CLI:
 
@@ -63,11 +63,12 @@ Its CLI and MCP entries share the same controller, installed identity, and user
 state. Node.js 24+ and the browser connection remain runtime requirements.
 Development checkouts are explicit overrides, not software-center releases.
 
-The macOS installer below reads the same OCI stable version and source commit.
-Choose Software Center or the standalone command for installation and updates.
-Both provide the same CLI, MCP Server and assistant Skill.
+Use OPL Software Center whenever OPL is installed. For standalone macOS
+environments without OPL, use the fallback installer below, which reads the
+same OCI stable version and source commit and provides the same CLI, MCP
+Server, and assistant Skill.
 
-## Install on macOS
+## Standalone macOS Fallback (without OPL)
 
 With Node.js 24+ available, run:
 

@@ -48,7 +48,7 @@ RedNote Steward 把准备好的素材、账号配置、发布任务和平台结�
 
 运行器会选择当前可执行的账号，一个未决任务不会挡住无关账号。同一台机器中，稳定账号 ID 或 Chrome profile 只对应一个状态 owner，多个 `XHS_OPS_HOME` 也不能绕过这一归属。
 
-## 通过 OPL 软件中心安装
+## 通过 OPL 软件中心安装（推荐）
 
 通过 OPL 软件中心或同一 CLI 管理正式 Package：
 
@@ -62,9 +62,11 @@ Package 发行源为 `ghcr.io/gaofeng21cn/one-person-lab-packages/rednote-stewar
 CLI 与 MCP 入口共用控制器、安装身份与用户状态。Node.js 24+ 和浏览器连接继续作为
 运行依赖；开发 checkout 仅为显式覆盖，不属于软件中心发行版本。
 
-下方 macOS 安装器读取同一 OCI 稳定版本与源码提交。软件中心和独立安装命令提供相同的 CLI、MCP Server 与助手 Skill，也使用同一个稳定更新源。
+已安装 OPL 的环境优先使用软件中心。如需在无 OPL 的 macOS 独立环境中部署，可使用
+下方独立安装兜底命令；两者读取同一 OCI 稳定版本与源码提交，提供相同的 CLI、
+MCP Server 与助手 Skill。
 
-## 在 macOS 上安装
+## macOS 独立安装兜底（无 OPL 环境）
 
 已有 Node.js 24+ 时，执行：
 
